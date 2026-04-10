@@ -53,13 +53,11 @@ const Sidebar = ({ isOpen, closeSidebar }) => {
     teacher: [
       { section: 'Principal' },
       { id: 'dashboard',     path: '/dashboard',     label: 'Tableau de Bord' },
-      { id: 'announcements', path: '/announcements', label: 'Annonces', badge: true },
       { section: 'Mon Espace' },
-      { id: 'students',      path: '/students',      label: 'Mes Étudiants' },
-      { id: 'schedule',      path: '/schedule',      label: 'Mon Planning' },
-      { id: 'absences',      path: '/absences',      label: 'Absences' },
-      { id: 'modules',       path: '/modules',       label: 'Mes Modules & Docs' },
-      { id: 'grades',        path: '/grades',        label: 'Notes' },
+      { id: 'schedule',      path: '/teacher/planning', label: 'Mon Planning' },
+      { id: 'absences',      path: '/teacher/absences', label: 'Absences' },
+      { id: 'modules',       path: '/teacher/modules',  label: 'Mes Modules & Docs' },
+      { id: 'grades',        path: '/teacher/notes',    label: 'Notes' },
     ],
     student: [
       { section: 'Mon Espace' },

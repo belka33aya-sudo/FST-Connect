@@ -19,7 +19,8 @@ const Clubs = () => {
   const handleToggleJoin = (club) => {
     if (!student) return;
     
-    const isMember = club.membres.includes(student.id);
+    const membres = club.membres || [];
+    const isMember = membres.includes(student.id);
     let newMembres;
     let newClubIds;
 
@@ -28,7 +29,7 @@ const Clubs = () => {
       newClubIds = (student.clubIds || []).filter(id => id !== club.id);
       showToast(`Vous avez quitté le club ${club.nom}.`, 'info');
     } else {
-      newMembres = [...club.membres, student.id];
+      newMembres = [...(club.membres || []), student.id];
       newClubIds = [...(student.clubIds || []), club.id];
       showToast(`Bienvenue au club ${club.nom} !`);
     }
@@ -43,9 +44,9 @@ const Clubs = () => {
     
     // Filter by tab
     if (filter === 'joined') {
-      list = list.filter(c => c.membres.includes(student?.id));
+      list = list.filter(c => (c.membres || []).includes(student?.id));
     } else if (filter === 'available') {
-      list = list.filter(c => !c.membres.includes(student?.id) && c.statut === 'ACTIF');
+      list = list.filter(c => !(c.membres || []).includes(student?.id) && c.statut === 'ACTIF');
     }
 
     // Filter by search
@@ -114,7 +115,8 @@ const Clubs = () => {
           </div>
         ) : (
           filteredClubs.map(club => {
-            const isMember = club.membres.includes(student?.id);
+            const membres = club.membres || [];
+            const isMember = membres.includes(student?.id);
             const isInactive = club.statut === 'INACTIF';
             
             return (
@@ -136,12 +138,12 @@ const Clubs = () => {
                   
                   <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: 'auto', paddingTop: '1.5rem', borderTop: '1px solid var(--border)' }}>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: '.7rem', color: 'var(--text-3)', fontWeight: 700, textTransform: 'uppercase' }}>Responsable</div>
-                      <div style={{ fontSize: '.85rem', fontWeight: 600 }}>{teacherName(club.responsableId)}</div>
+                      <div style={{ fontSize: '.75rem', color: 'var(--text-3)', fontWeight: 700, textTransform: 'uppercase' }}>Responsable</div>
+                      <div style={{ fontSize: '.85rem', fontWeight: 600 }}>{teacherName(club.idResponsable || club.responsableId)}</div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '.7rem', color: 'var(--text-3)', fontWeight: 700, textTransform: 'uppercase' }}>Membres</div>
-                      <div style={{ fontSize: '.85rem', fontWeight: 800, color: 'var(--blue-mid)' }}>{club.membres.length}</div>
+                      <div style={{ fontSize: '.75rem', color: 'var(--text-3)', fontWeight: 700, textTransform: 'uppercase' }}>Membres</div>
+                      <div style={{ fontSize: '.85rem', fontWeight: 800, color: 'var(--blue-mid)' }}>{membres.length}</div>
                     </div>
                   </div>
                 </div>

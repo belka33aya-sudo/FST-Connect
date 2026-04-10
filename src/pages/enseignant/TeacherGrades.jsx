@@ -5,14 +5,15 @@ import { useAuth } from '../../contexts/AuthContext';
 const TeacherGrades = () => {
   const { db, save, nextId, gradeAvg } = useData();
   const { currentUser } = useAuth();
-  const teacherId = currentUser?.linkedId;
+  const teacher = useMemo(() => db.enseignants.find(t => t.utilisateurId === currentUser.id), [db.enseignants, currentUser.id]);
+  const teacherId = teacher?.id;
 
   const [selectedModuleId, setSelectedModuleId] = useState('');
   const [editGrades, setEditGrades] = useState({});
 
   const myModules = useMemo(() =>
-    db.modules.filter(m => m.teacherId === teacherId),
-  [db, teacherId]);
+    db.modules.filter(m => (m.idEnseignant === teacherId || m.teacherId === teacherId)),
+  [db.modules, teacherId]);
 
   const selectedModule = useMemo(() =>
     selectedModuleId ? myModules.find(m => m.id === parseInt(selectedModuleId)) : null,
@@ -20,8 +21,9 @@ const TeacherGrades = () => {
 
   const studentsInModule = useMemo(() => {
     if (!selectedModule) return [];
-    return selectedModule.filiereId ? db.students.filter(s => s.filiereId === selectedModule.filiereId) : db.students;
-  }, [db, selectedModule]);
+    const filiereId = selectedModule.idFiliere || selectedModule.filiereId;
+    return filiereId ? db.etudiants.filter(s => (s.idFiliere === filiereId || s.filiereId === filiereId)) : db.etudiants;
+  }, [db.etudiants, selectedModule]);
 
   // Load initial grades from db to local state whenever module changes or db changes
   React.useEffect(() => {
@@ -31,15 +33,15 @@ const TeacherGrades = () => {
     }
     const initGrades = {};
     studentsInModule.forEach(student => {
-      const g = db.grades.find(x => x.studentId === student.id && x.moduleId === selectedModule.id);
+      const g = db.notes.find(x => (x.idEtudiant === student.id || x.studentId === student.id) && (x.idModule === selectedModule.id || x.moduleId === selectedModule.id));
       if (g) {
-        initGrades[student.id] = { cc: g.cc ?? '', final: g.final ?? '', publiee: g.publiee };
+        initGrades[student.id] = { cc: g.valeurCC ?? g.cc ?? '', final: g.valeurEF ?? g.final ?? '', publiee: g.publiee };
       } else {
         initGrades[student.id] = { cc: '', final: '', publiee: false };
       }
     });
     setEditGrades(initGrades);
-  }, [db.grades, selectedModule, studentsInModule]);
+  }, [db.notes, selectedModule, studentsInModule]);
 
   const handleGradeChange = (studentId, field, value) => {
     // Only allow numbers
@@ -57,7 +59,7 @@ const TeacherGrades = () => {
 
   const handleSaveStudent = (studentId, publish = false) => {
     if (!selectedModule) return;
-    const gRow = db.grades.find(x => x.studentId === studentId && x.moduleId === selectedModule.id);
+    const gRow = db.notes.find(x => (x.idEtudiant === studentId || x.studentId === studentId) && (x.idModule === selectedModule.id || x.moduleId === selectedModule.id));
     const lg = editGrades[studentId];
     
     // Parse valid numbers
@@ -65,19 +67,25 @@ const TeacherGrades = () => {
     const finalVal = lg.final !== '' ? parseFloat(lg.final) : null;
 
     if (gRow) {
-      save('grades', {
+      save('notes', {
         ...gRow,
-        cc: ccVal,
-        final: finalVal,
+        valeurCC: ccVal,
+        valeurEF: finalVal,
+        cc: ccVal, // Keep legacy for now too
+        final: finalVal, // Keep legacy for now too
         publiee: publish || gRow.publiee,
         edited: true,
         datePublication: publish ? new Date().toISOString() : gRow.datePublication
       });
     } else {
-      save('grades', {
-        id: nextId('grades'),
-        studentId,
+      save('notes', {
+        id: nextId('notes'),
+        idEtudiant: studentId,
+        studentId: studentId,
+        idModule: selectedModule.id,
         moduleId: selectedModule.id,
+        valeurCC: ccVal,
+        valeurEF: finalVal,
         cc: ccVal,
         final: finalVal,
         publiee: publish,
@@ -116,7 +124,7 @@ const TeacherGrades = () => {
           >
             <option value="">-- Choisissez un module --</option>
             {myModules.map(m => (
-              <option key={m.id} value={m.id}>{m.code} - {m.title}</option>
+              <option key={m.id} value={m.id}>{m.code} - {m.intitule || m.title}</option>
             ))}
           </select>
           {selectedModule && (
@@ -151,21 +159,23 @@ const TeacherGrades = () => {
               <tbody>
                 {studentsInModule.length > 0 ? studentsInModule.map(student => {
                   const sGrade = editGrades[student.id] || { cc: '', final: '', publiee: false };
-                  const gRecord = db.grades.find(x => x.studentId === student.id && x.moduleId === selectedModule.id);
+                  const gRecord = db.notes.find(x => (x.idEtudiant === student.id || x.studentId === student.id) && (x.idModule === selectedModule.id || x.moduleId === selectedModule.id));
                   
                   // Compute average visually
                   const ccVal = parseFloat(sGrade.cc);
                   const finalVal = parseFloat(sGrade.final);
                   let avg = '—';
                   if (!isNaN(ccVal) && !isNaN(finalVal)) {
-                    avg = gradeAvg(ccVal, finalVal, selectedModule.coeffCC, selectedModule.coeffEF);
+                    avg = gradeAvg(ccVal, finalVal, selectedModule.coeffCC || 0.4, selectedModule.coeffEF || 0.6);
                   }
 
                   const isPublished = gRecord?.publiee;
+                  const u = db.utilisateurs.find(user => user.id === student.utilisateurId);
+                  const fullName = u ? `${u.prenom} ${u.nom}` : (student.name || '—');
 
                   return (
                     <tr key={student.id}>
-                      <td style={{ fontWeight: 600, color: 'var(--blue-dark)' }}>{student.name}</td>
+                      <td style={{ fontWeight: 600, color: 'var(--blue-dark)' }}>{fullName}</td>
                       <td>{student.CNE}</td>
                       <td>
                         <input

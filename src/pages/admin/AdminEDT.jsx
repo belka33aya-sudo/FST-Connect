@@ -23,14 +23,22 @@ const AdminEDT = () => {
   const [editingSession, setEditingSession] = useState(null);
 
   // --- Form States ---
-  const [docFormData, setDocFormData] = useState({ title: '', filiereId: '', version: '1.0', status: 'PUBLIÉ' });
-  const [sessionFormData, setSessionFormData] = useState({ day: 1, startSlot: '08:30', moduleId: '', groupId: '', teacherId: '', roomId: '', type: 'Cours' });
+  const [docFormData, setDocFormData] = useState({ titre: '', title: '', idFiliere: '', filiereId: '', version: '1.0', status: 'PUBLIÉ' });
+  const [sessionFormData, setSessionFormData] = useState({ 
+    jourNum: 1, day: 1, 
+    heureDebut: '08:30', startSlot: '08:30', 
+    idModule: '', moduleId: '', 
+    idGroupe: '', groupId: '', 
+    idEnseignant: '', teacherId: '', 
+    idSalle: '', roomId: '', 
+    type: 'Cours' 
+  });
 
   // --- Documents Management Logic ---
   const filteredDocs = useMemo(() => {
     return (db.documents || []).filter(doc => {
-      const matchesFiliere = !filiereFilter || doc.filiereId === parseInt(filiereFilter);
-      const matchesSearch = !searchTerm || doc.title.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesFiliere = !filiereFilter || (doc.idFiliere || doc.filiereId) === parseInt(filiereFilter);
+      const matchesSearch = !searchTerm || (doc.titre || doc.title).toLowerCase().includes(searchTerm.toLowerCase());
       return matchesFiliere && matchesSearch;
     });
   }, [db.documents, filiereFilter, searchTerm]);
@@ -49,13 +57,14 @@ const AdminEDT = () => {
   ];
 
   const getSessionForSlot = (dayId, slotStart) => {
-    return db.sessions.find(s => {
-      if (s.day !== dayId) return false;
-      if (filiereFilter && s.filiereId !== parseInt(filiereFilter)) {
-         const group = db.groups.find(g => g.id === s.groupId);
-         if (group?.filiereId !== parseInt(filiereFilter)) return false;
+    return db.seances.find(s => {
+      if ((s.day || s.jourNum) !== dayId) return false;
+      if (filiereFilter && (s.idFiliere || s.filiereId) !== parseInt(filiereFilter)) {
+         const group = db.groupes.find(g => g.id === (s.idGroupe || s.groupId));
+         if ((group?.idFiliere || group?.filiereId) !== parseInt(filiereFilter)) return false;
       }
-      const sStart = parseInt(s.startSlot.split(':')[0]);
+      const sStartString = s.startSlot || s.heureDebut || '00:00';
+      const sStart = parseInt(sStartString.split(':')[0]);
       const slotStartHour = parseInt(slotStart.split(':')[0]);
       return Math.abs(sStart - slotStartHour) <= 1;
     });
@@ -97,7 +106,8 @@ const AdminEDT = () => {
     const data = {
       ...docFormData,
       id: editingDoc ? editingDoc.id : nextId('documents'),
-      filiereId: parseInt(docFormData.filiereId),
+      idFiliere: parseInt(docFormData.idFiliere || docFormData.filiereId),
+      titre: docFormData.titre || docFormData.title,
       date: new Date().toISOString().split('T')[0],
       author: 'Admin',
       size: '1.2 MB'
@@ -111,16 +121,24 @@ const AdminEDT = () => {
     e.preventDefault();
     const data = {
       ...sessionFormData,
-      id: editingSession ? editingSession.id : nextId('sessions'),
-      moduleId: parseInt(sessionFormData.moduleId),
-      groupId: parseInt(sessionFormData.groupId),
-      teacherId: parseInt(sessionFormData.teacherId),
-      roomId: parseInt(sessionFormData.roomId),
-      endSlot: sessionFormData.startSlot === '08:30' ? '10:30' : 
-               sessionFormData.startSlot === '10:30' ? '12:30' : 
-               sessionFormData.startSlot === '14:30' ? '16:30' : '18:30'
+      id: editingSession ? editingSession.id : nextId('seances'),
+      idModule: parseInt(sessionFormData.idModule || sessionFormData.moduleId),
+      moduleId: parseInt(sessionFormData.idModule || sessionFormData.moduleId),
+      idGroupe: parseInt(sessionFormData.idGroupe || sessionFormData.groupId),
+      groupId: parseInt(sessionFormData.idGroupe || sessionFormData.groupId),
+      idEnseignant: parseInt(sessionFormData.idEnseignant || sessionFormData.teacherId),
+      teacherId: parseInt(sessionFormData.idEnseignant || sessionFormData.teacherId),
+      idSalle: parseInt(sessionFormData.idSalle || sessionFormData.roomId),
+      roomId: parseInt(sessionFormData.idSalle || sessionFormData.roomId),
+      heureDebut: sessionFormData.heureDebut || sessionFormData.startSlot,
+      startSlot: sessionFormData.heureDebut || sessionFormData.startSlot,
+      jourNum: parseInt(sessionFormData.jourNum || sessionFormData.day),
+      day: parseInt(sessionFormData.jourNum || sessionFormData.day),
+      heureFin: (sessionFormData.heureDebut || sessionFormData.startSlot) === '08:30' ? '10:30' : 
+               (sessionFormData.heureDebut || sessionFormData.startSlot) === '10:30' ? '12:30' : 
+               (sessionFormData.heureDebut || sessionFormData.startSlot) === '14:30' ? '16:30' : '18:30'
     };
-    save('sessions', data);
+    save('seances', data);
     setShowSessionPanel(false);
     success(editingSession ? 'Séance modifiée' : 'Séance réservée avec succès');
   };
@@ -232,9 +250,9 @@ const AdminEDT = () => {
                   </div>
                 </div>
                 
-                <h3 className="doc-title">{doc.title}</h3>
+                <h3 className="doc-title">{doc.titre || doc.title}</h3>
                 <div className="doc-meta">
-                  <span className="doc-filiere">{filiereName(doc.filiereId)}</span>
+                  <span className="doc-filiere">{filiereName(doc.idFiliere || doc.filiereId)}</span>
                   <span className="doc-dot">•</span>
                   <span>v{doc.version}</span>
                 </div>
@@ -310,10 +328,10 @@ const AdminEDT = () => {
                        <td>
                          {session ? (
                            <div className="session-info">
-                             <div className="session-module">{moduleName(session.moduleId)}</div>
+                             <div className="session-module">{moduleName(session.idModule || session.moduleId)}</div>
                              <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
                                <span className="badge badge-blue">{session.type}</span>
-                               <span className="badge badge-gray">{groupName(session.groupId)}</span>
+                               <span className="badge badge-gray">{groupName(session.idGroupe || session.groupId)}</span>
                              </div>
                            </div>
                          ) : <span className="empty-text">Créneau disponible</span>}
@@ -321,14 +339,14 @@ const AdminEDT = () => {
                        <td>
                          {session && (
                            <div className="session-teacher">
-                             <User size={14} /> {teacherName(session.teacherId)}
+                             <User size={14} /> {teacherName(session.idEnseignant || session.teacherId)}
                            </div>
                          )}
                        </td>
                        <td>
                          {session && (
                            <div className="session-room">
-                             <MapPin size={14} /> {roomName(session.roomId)}
+                             <MapPin size={14} /> {roomName(session.idSalle || session.roomId)}
                            </div>
                          )}
                        </td>
@@ -418,25 +436,31 @@ const AdminEDT = () => {
 
               <div className="form-group">
                 <label className="form-label">Module *</label>
-                <select className="form-control" value={sessionFormData.moduleId} onChange={e => setSessionFormData({...sessionFormData, moduleId: e.target.value})} required>
+                <select className="form-control" value={sessionFormData.idModule || sessionFormData.moduleId || ''} onChange={e => setSessionFormData({...sessionFormData, idModule: e.target.value, moduleId: e.target.value})} required>
                   <option value="">Sélectionner le module...</option>
-                  {db.modules.map(m => <option key={m.id} value={m.id}>{m.title}</option>)}
+                  {db.modules.map(m => <option key={m.id} value={m.id}>{m.intitule || m.title}</option>)}
                 </select>
               </div>
 
               <div className="form-group">
                 <label className="form-label">Groupe d'étudiants *</label>
-                <select className="form-control" value={sessionFormData.groupId} onChange={e => setSessionFormData({...sessionFormData, groupId: e.target.value})} required>
+                <select className="form-control" value={sessionFormData.idGroupe || sessionFormData.groupId || ''} onChange={e => setSessionFormData({...sessionFormData, idGroupe: e.target.value, groupId: e.target.value})} required>
                   <option value="">Sélectionner le groupe...</option>
-                  {db.groups.map(g => <option key={g.id} value={g.id}>{g.name} ({filiereName(g.filiereId)})</option>)}
+                  {(db.groupes || db.groups || []).map(g => (
+                    <option key={g.id} value={g.id}>{g.nom || g.name} ({filiereName(g.idFiliere || g.filiereId)})</option>
+                  ))}
                 </select>
               </div>
 
               <div className="form-group">
                 <label className="form-label">Enseignant responsable *</label>
-                <select className="form-control" value={sessionFormData.teacherId} onChange={e => setSessionFormData({...sessionFormData, teacherId: e.target.value})} required>
+                <select className="form-control" value={sessionFormData.idEnseignant || sessionFormData.teacherId || ''} onChange={e => setSessionFormData({...sessionFormData, idEnseignant: e.target.value, teacherId: e.target.value})} required>
                   <option value="">Sélectionner le professeur...</option>
-                  {db.teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  {(db.enseignants || db.teachers || []).map(t => {
+                    const user = db.utilisateurs?.find(u => u.id === t.utilisateurId) || t;
+                    const name = user.prenom ? `${user.prenom} ${user.nom}` : (user.name || user.nom);
+                    return <option key={t.id} value={t.id}>{name}</option>
+                  })}
                 </select>
               </div>
 

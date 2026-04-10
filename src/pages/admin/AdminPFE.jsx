@@ -12,7 +12,7 @@ const AdminPFE = () => {
   const [statusFilter, setStatusFilter] = useState('');
 
   const [formData, setFormData] = useState({
-    titre: '', studentIds: [], encadrantId: '', statut: 'EN_ATTENTE', 
+    titre: '', idEtudiant: '', studentIds: [], idEncadrant: '', encadrantId: '', statut: 'EN_ATTENTE', 
     dateSoutenance: '', jury: [], note: ''
   });
 
@@ -24,6 +24,8 @@ const AdminPFE = () => {
     setSelectedPFE(pfe);
     setFormData({ 
       ...pfe,
+      idEtudiant: pfe.idEtudiant || pfe.studentId || (pfe.studentIds?.[0]) || '',
+      idEncadrant: pfe.idEncadrant || pfe.encadrantId || '',
       dateSoutenance: pfe.dateSoutenance || '',
       jury: pfe.jury || [],
       note: pfe.note || ''
@@ -33,7 +35,7 @@ const AdminPFE = () => {
 
   const handleOpenAdd = () => {
     setSelectedPFE(null);
-    setFormData({ titre: '', studentIds: [], encadrantId: '', statut: 'EN_ATTENTE', dateSoutenance: '', jury: [], note: '' });
+    setFormData({ titre: '', idEtudiant: '', studentIds: [], idEncadrant: '', encadrantId: '', statut: 'EN_ATTENTE', dateSoutenance: '', jury: [], note: '' });
     setShowPanel(true);
   };
 
@@ -42,8 +44,10 @@ const AdminPFE = () => {
     const data = {
       ...formData,
       id: selectedPFE ? selectedPFE.id : nextId('pfes'),
-      encadrantId: parseInt(formData.encadrantId),
-      studentIds: Array.isArray(formData.studentIds) ? formData.studentIds.map(id => parseInt(id)) : [parseInt(formData.studentIds)]
+      idEncadrant: parseInt(formData.idEncadrant || formData.encadrantId),
+      encadrantId: parseInt(formData.idEncadrant || formData.encadrantId),
+      idEtudiant: parseInt(formData.idEtudiant || (formData.studentIds?.[0])),
+      studentIds: formData.studentIds || [parseInt(formData.idEtudiant)]
     };
     save('pfes', data);
     setShowPanel(false);
@@ -116,11 +120,11 @@ const AdminPFE = () => {
                   <td>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <Users size={12} color="var(--text-3)" />
-                      {pfe.studentIds.map(id => studentName(id)).join(' & ')}
+                      {(pfe.idEtudiant || pfe.studentId) ? studentName(pfe.idEtudiant || pfe.studentId) : pfe.studentIds?.map(id => studentName(id)).join(' & ')}
                     </div>
                   </td>
                   <td>
-                    <div style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-1)' }}>{teacherName(pfe.encadrantId)}</div>
+                    <div style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-1)' }}>{teacherName(pfe.idEncadrant || pfe.encadrantId)}</div>
                   </td>
                   <td>{getStatutBadge(pfe.statut)}</td>
                   <td>
@@ -155,9 +159,13 @@ const AdminPFE = () => {
 
                <div className="form-group">
                  <label className="form-label">Encadrant (Rapporteur Interne) *</label>
-                 <select className="form-control" value={formData.encadrantId} onChange={e => setFormData({...formData, encadrantId: e.target.value})} required>
+                 <select className="form-control" value={formData.idEncadrant || formData.encadrantId} onChange={e => setFormData({...formData, idEncadrant: e.target.value})} required>
                    <option value="">Choisir un enseignant...</option>
-                   {db.teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                   {(db.enseignants || db.teachers || []).map(t => {
+                     const user = db.utilisateurs?.find(u => u.id === t.utilisateurId) || t;
+                     const name = user.prenom ? `${user.prenom} ${user.nom}` : (user.name || user.nom);
+                     return <option key={t.id} value={t.id}>{name}</option>
+                   })}
                  </select>
                </div>
 
@@ -198,9 +206,13 @@ const AdminPFE = () => {
                          const n = [...formData.jury]; n[i] = e.target.value; setFormData({...formData, jury: n});
                        }}
                      >
-                        <option value="">Membre {i+1}...</option>
-                        {db.teachers.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
-                     </select>
+                         <option value="">Membre {i+1}...</option>
+                         {(db.enseignants || db.teachers || []).map(t => {
+                            const user = db.utilisateurs?.find(u => u.id === t.utilisateurId) || t;
+                            const name = user.prenom ? `${user.prenom} ${user.nom}` : (user.name || user.nom);
+                            return <option key={t.id} value={name}>{name}</option>
+                         })}
+                      </select>
                    ))}
                  </div>
                </div>

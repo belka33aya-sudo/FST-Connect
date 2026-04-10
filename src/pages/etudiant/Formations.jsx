@@ -21,6 +21,7 @@ const Formations = () => {
     
     const newInscription = {
       id: nextId('inscriptionsFormations'),
+      idEtudiant: student.id,
       studentId: student.id,
       formationId: formation.id,
       statut: 'EN_ATTENTE',
@@ -36,7 +37,7 @@ const Formations = () => {
   };
 
   const myInscriptions = useMemo(() => {
-    return (db.inscriptionsFormations || []).filter(i => i.studentId === student?.id);
+    return (db.inscriptionsFormations || []).filter(i => (i.idEtudiant === student?.id || i.studentId === student?.id));
   }, [db.inscriptionsFormations, student?.id]);
 
   const filteredFormations = useMemo(() => {

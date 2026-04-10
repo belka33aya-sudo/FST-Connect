@@ -16,7 +16,7 @@ export const DataProvider = ({ children }) => {
     
     // SS2 — ACTEURS
     etudiants: [
-      { id: 3, idEtudiant: 3, utilisateurId: 3, cne: 'GL001', CNE: 'GL001', idFiliere: 1, filiereId: 1, idGroupeTD: 1, groupTDId: 1, idGroupeTP: 1, groupTPId: 1, statut: 'ACTIF', name: 'Youssef Ait Ahmed' },
+      { id: 3, idEtudiant: 3, utilisateurId: 3, cne: 'GL001', CNE: 'GL001', idFiliere: 1, filiereId: 1, idGroupeTD: 1, groupTDId: 1, idGroupeTP: 1, groupTPId: 1, statut: 'ACTIF', name: 'Youssef Ait Ahmed', anneeInscription: 3 },
     ],
     enseignants: [
       { id: 2, idEnseignant: 2, utilisateurId: 2, matricule: 'PES-101', grade: 'PES', type: 'Titulaire', specialite: 'Génie Logiciel', specialty: 'Génie Logiciel', volumeHoraireBase: 12, statut: 'ACTIF', name: 'Prof. Samira Idrissi' }
@@ -74,6 +74,9 @@ export const DataProvider = ({ children }) => {
     ],
     annonces: [
       { id: 1, idAnnonce: 1, titre: 'Réunion', title: 'Réunion', contenu: 'Contenu...', body: 'Contenu...', dateCreation: '2026-04-05', createdAt: '2026-04-05', urgent: true, urgente: true, statut: 'PUBLIE', cible: 'Tous', target: 'Tous', idAdministrateur: 1, readBy: [] }
+    ],
+    stages: [
+      { id: 1, idStage: 1, idEtudiant: 3, entreprise: 'Tech Solutions', lieu: 'Casablanca', encadrantEntreprise: 'M. Alami', sujet: 'Développement d\'une application de gestion', statutConvention: 'SIGNEE', dateDebut: '2026-05-01', dateFin: '2026-07-31' }
     ],
   });
 
@@ -150,10 +153,17 @@ export const DataProvider = ({ children }) => {
     return (db.annonces || []).filter(a => !a.readBy?.includes(userId)).length;
   };
 
+  const getStudentByUserId = (userId) => db.etudiants.find(s => s.utilisateurId === userId);
+  const getTeacherByUserId = (userId) => db.enseignants.find(t => t.utilisateurId === userId);
+
+  const gradeAvg = (cc = 0, exam = 0, coeffCC = 0.4, coeffExam = 0.6) => {
+    return (cc * coeffCC) + (exam * coeffExam);
+  };
+
   const value = {
     db: legacyDb, nextId, save, remove, getById,
     filiereName, teacherName, studentName, moduleName, roomName, groupName,
-    unreadAnnouncements
+    unreadAnnouncements, getStudentByUserId, getTeacherByUserId, gradeAvg
   };
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;

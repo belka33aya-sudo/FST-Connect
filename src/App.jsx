@@ -41,6 +41,7 @@ import AdminNotes from './pages/admin/AdminNotes';
 import TeacherGrades from './pages/enseignant/TeacherGrades';
 import MonPlanning from './pages/enseignant/MonPlanning';
 import TeacherAbsences from './pages/enseignant/TeacherAbsences';
+import TeacherModules from './pages/enseignant/TeacherModules';
 import ModulesRouter from './pages/ModulesRouter';
 
 function App() {
@@ -58,14 +59,18 @@ function App() {
           <Route path="/clubs"     element={<PublicClubs />} />
         </Route>
 
-        {/* ── Admin / Teacher private routes ── */}
+        {/* ── Main App routes (Admin & Teacher shared) ── */}
         <Route element={<ProtectedRoute allowedRoles={['admin', 'teacher']} />}>
           <Route element={<AppLayout />}>
-             <Route path="/dashboard"     element={<Dashboard />} />
-             <Route path="/registre"      element={<AdminEtudiants />} />
-             <Route path="/etudiants"     element={<Navigate to="/registre" replace />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+          </Route>
+        </Route>
+
+        {/* ── Admin specific routes ── */}
+        <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
+          <Route element={<AppLayout />}>
+            <Route path="/registre"      element={<AdminEtudiants />} />
             <Route path="/enseignants"   element={<AdminEnseignants />} />
-            <Route path="/gestion-planning" element={<AdminEDT />} />
             <Route path="/admin/edt"     element={<AdminEDT />} />
             <Route path="/annonces"      element={<AdminAnnonces />} />
             <Route path="/modules"       element={<AdminModules />} />
@@ -75,13 +80,27 @@ function App() {
             <Route path="/notes"         element={<AdminNotes />} />
             <Route path="/pfe"           element={<AdminPFE />} />
             <Route path="/reclamations"  element={<AdminReclamations />} />
-            {/* Keeping old routes as aliases for now to prevent breaking other pages */}
+            
             <Route path="/students"      element={<Navigate to="/registre" replace />} />
             <Route path="/teachers"      element={<Navigate to="/enseignants" replace />} />
-            <Route path="/announcements" element={<Navigate to="/annonces" replace />} />
             <Route path="/grades"        element={<Navigate to="/notes" replace />} />
             <Route path="/schedule"      element={<Navigate to="/admin/edt" replace />} />
-            <Route path="/edt"           element={<Navigate to="/admin/edt" replace />} />
+          </Route>
+        </Route>
+
+        {/* ── Teacher specific routes ── */}
+        <Route element={<ProtectedRoute allowedRoles={['teacher']} />}>
+          <Route element={<AppLayout />}>
+            <Route path="/teacher/dashboard" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/teacher/planning"  element={<MonPlanning />} />
+            <Route path="/teacher/absences"  element={<TeacherAbsences />} />
+            <Route path="/teacher/notes"     element={<TeacherGrades />} />
+            <Route path="/teacher/modules"   element={<TeacherModules />} />
+            
+            <Route path="/schedule"          element={<Navigate to="/teacher/planning" replace />} />
+            <Route path="/absences"          element={<Navigate to="/teacher/absences" replace />} />
+            <Route path="/grades"            element={<Navigate to="/teacher/notes" replace />} />
+            <Route path="/modules"           element={<Navigate to="/teacher/modules" replace />} />
           </Route>
         </Route>
 
@@ -97,6 +116,7 @@ function App() {
             <Route path="/etudiant/ressources" element={<Ressources />} />
             <Route path="/etudiant/clubs"      element={<Clubs />} />
             <Route path="/etudiant/formations" element={<Formations />} />
+            <Route path="/announcements"       element={<Announcements />} />
           </Route>
         </Route>
 

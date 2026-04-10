@@ -74,12 +74,13 @@ const Projets = () => {
   const student = getStudentByUserId(currentUser.id);
   if (!student) return <div className="empty-state"><p>Profil étudiant introuvable.</p></div>;
 
-  const filiere = db.filieres.find(f => f.id === student.filiereId);
+  const studentId = student.id;
+  const filiere = db.filieres.find(f => f.id === (student.idFiliere || student.filiereId));
   const isReadOnly = student.statut === 'ABANDONNE';
   const isLastYear = filiere && student.anneeInscription === filiere.duree;
 
-  const myPFE = db.pfes.find(p => p.studentIds.includes(student.id));
-  const myStage = db.stages.find(s => s.studentId === student.id);
+  const myPFE = db.pfes.find(p => (p.idEtudiant === studentId || p.studentId === studentId || p.studentIds?.includes(studentId)));
+  const myStage = db.stages.find(s => (s.idEtudiant === studentId || s.studentId === studentId));
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -228,21 +229,21 @@ const Projets = () => {
                   <div className="page-card-body">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
                       <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'var(--blue-mid)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', fontWeight: 800 }}>
-                        {teacherName(myPFE.encadrantId).charAt(0)}
+                        {teacherName(myPFE.idEncadrant || myPFE.encadrantId).charAt(0)}
                       </div>
                       <div>
                         <div style={{ fontSize: '.75rem', color: 'var(--text-3)', fontWeight: 700 }}>Encadrant Principal</div>
-                        <div style={{ fontWeight: 700 }}>{teacherName(myPFE.encadrantId)}</div>
+                        <div style={{ fontWeight: 700 }}>{teacherName(myPFE.idEncadrant || myPFE.encadrantId)}</div>
                       </div>
                     </div>
-                    {myPFE.coEncadrantId && (
+                    {(myPFE.idCoEncadrant || myPFE.coEncadrantId) && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                         <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'var(--blue-light)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', fontWeight: 800 }}>
-                          {teacherName(myPFE.coEncadrantId).charAt(0)}
+                          {teacherName(myPFE.idCoEncadrant || myPFE.coEncadrantId).charAt(0)}
                         </div>
                         <div>
                           <div style={{ fontSize: '.75rem', color: 'var(--text-3)', fontWeight: 700 }}>Co-Encadrant</div>
-                          <div style={{ fontWeight: 700 }}>{teacherName(myPFE.coEncadrantId)}</div>
+                          <div style={{ fontWeight: 700 }}>{teacherName(myPFE.idCoEncadrant || myPFE.coEncadrantId)}</div>
                         </div>
                       </div>
                     )}

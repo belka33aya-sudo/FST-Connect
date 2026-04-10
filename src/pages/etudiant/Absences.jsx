@@ -90,25 +90,24 @@ const Absences = () => {
 
   // Filtre server-side: CNE de l'étudiant authentifié (RG38) — ON NE VOIT JAMAIS les absences d'un autre
   const myAbsences = useMemo(() =>
-    db.absences.filter(a => a.studentId === student.id),
+    db.absences.filter(a => (a.idEtudiant === student.id || a.studentId === student.id)),
     [db.absences, student.id]
   );
 
-  // Groupement par module
   const myModules = useMemo(() => {
-    const filiereModules = db.modules.filter(m => m.filiereId === student.filiereId);
+    const filiereModules = db.modules.filter(m => (m.idFiliere === student.idFiliere || m.filiereId === student.filiereId));
     return filiereModules.map(mod => {
-      const modSessions = db.sessions.filter(s => s.moduleId === mod.id);
-      const modAbsences = myAbsences.filter(a => modSessions.some(s => s.id === a.sessionId));
+      const modSessions = db.seances.filter(s => (s.idModule === mod.id || s.moduleId === mod.id));
+      const modAbsences = myAbsences.filter(a => modSessions.some(s => s.id === (a.idSeance || a.sessionId)));
       const injustifiees = modAbsences.filter(a => a.statut === 'INJUSTIFIEE').length;
       const justifiees   = modAbsences.filter(a => a.statut === 'JUSTIFIEE').length;
       const enAttente    = modAbsences.filter(a => a.statut === 'EN_ATTENTE').length;
       const total        = modAbsences.length;
-      // RG36: taux = (absences / totalSeances) * 100 — arrondi à 1 décimale
-      const taux = mod.totalSeances > 0 ? +((total / mod.totalSeances) * 100).toFixed(1) : 0;
-      return { ...mod, injustifiees, justifiees, enAttente, total, taux, absences: modAbsences, modSessions };
-    }).filter(m => m.absences.length > 0 || true); // afficher tous les modules
-  }, [db.modules, db.sessions, myAbsences, student.filiereId]);
+      const totalSeances = mod.totalSeances || 0;
+      const taux = totalSeances > 0 ? +((total / totalSeances) * 100).toFixed(1) : 0;
+      return { ...mod, injustifiees, justifiees, enAttente, total, taux, absences: modAbsences, modSessions, totalSeances };
+    })
+  }, [db.modules, db.seances, myAbsences, student.idFiliere, student.filiereId]);
 
   const handleSubmitJustificatif = ({ absenceId, motif, fichier }) => {
     const absence = db.absences.find(a => a.id === absenceId);
@@ -164,7 +163,7 @@ const Absences = () => {
           <div key={mod.id} className="page-card animate-up">
             <div className="page-card-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '.75rem' }}>
-                <h3 className="page-card-title">{mod.title}</h3>
+                <h3 className="page-card-title">{mod.intitule || mod.title}</h3>
                 <span style={{ fontSize: '.75rem', color: 'var(--text-3)' }}>{mod.code}</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '.75rem' }}>
@@ -205,11 +204,13 @@ const Absences = () => {
                     </thead>
                     <tbody>
                       {mod.absences.map(abs => {
-                        const sess = db.sessions.find(s => s.id === abs.sessionId);
+                        const sess = db.seances.find(s => s.id === (abs.idSeance || abs.sessionId));
+                        const start = sess?.heureDebut || sess?.startSlot || '—';
+                        const end = sess?.heureFin || sess?.endSlot || '—';
                         return (
                           <tr key={abs.id}>
-                            <td style={{ fontVariantNumeric: 'tabular-nums', fontSize: '.82rem' }}>{abs.date}</td>
-                            <td style={{ fontSize: '.82rem' }}>{sess ? `${sess.startSlot}–${sess.endSlot}` : '—'}</td>
+                            <td style={{ fontVariantNumeric: 'tabular-nums', fontSize: '.82rem' }}>{abs.dateSaisie || abs.date}</td>
+                            <td style={{ fontSize: '.82rem' }}>{sess ? `${start}–${end}` : '—'}</td>
                             <td>{sess && <span className={`badge badge-${sess.type === 'Cours' ? 'blue' : sess.type === 'TD' ? 'green' : 'orange'}`}>{sess.type}</span>}</td>
                             <td>
                               <span className={`badge ${abs.statut === 'INJUSTIFIEE' ? 'badge-red' : abs.statut === 'JUSTIFIEE' ? 'badge-green' : 'badge-yellow'}`}>

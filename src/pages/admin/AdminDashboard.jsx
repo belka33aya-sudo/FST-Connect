@@ -28,18 +28,19 @@ const AdminDashboard = () => {
 
   // Basic stats for small integrated display
   const quickStats = useMemo(() => ([
-    { label: 'Étudiants', value: db.students?.length || 0, icon: <Users size={16} />, color: 'var(--info)' },
-    { label: 'Enseignants', value: db.teachers?.length || 0, icon: <GraduationCap size={16} />, color: 'var(--orange)' },
+    { label: 'Étudiants', value: (db.etudiants?.length || db.students?.length || 0), icon: <Users size={16} />, color: 'var(--info)' },
+    { label: 'Enseignants', value: (db.enseignants?.length || db.teachers?.length || 0), icon: <GraduationCap size={16} />, color: 'var(--orange)' },
     { label: 'Modules', value: db.modules?.length || 0, icon: <BookOpen size={16} />, color: 'var(--success)' },
     { label: 'PFEs', value: db.pfes?.length || 0, icon: <Briefcase size={16} />, color: 'var(--blue-mid)' },
   ]), [db]);
 
   const criticalAbsences = useMemo(() => {
-    return db.students.map(s => {
-      const absences = db.absences.filter(a => a.studentId === s.id).length;
+    const etudiantsList = db.etudiants || db.students || [];
+    return etudiantsList.map(s => {
+      const absences = db.absences.filter(a => (a.idEtudiant === s.id || a.studentId === s.id)).length;
       const rate = (absences / 20) * 100; // Mock sessions count
       return { ...s, rate: rate.toFixed(1) };
-    }).filter(s => s.rate > 15).sort((a, b) => b.rate - a.rate).slice(0, 4);
+    }).filter(s => parseFloat(s.rate) > 15).sort((a, b) => b.rate - a.rate).slice(0, 4);
   }, [db]);
 
   const pendingReclamations = useMemo(() => {
@@ -99,8 +100,8 @@ const AdminDashboard = () => {
                 <tbody>
                   {criticalAbsences.map(s => (
                     <tr key={s.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                      <td style={{ padding: '12px 16px', fontSize: '0.88rem', fontWeight: '700', color: 'var(--blue-dark)' }}>{s.name}</td>
-                      <td style={{ padding: '12px 16px', fontSize: '0.8rem', color: 'var(--text-2)' }}>{filiereName(s.filiereId)}</td>
+                      <td style={{ padding: '12px 16px', fontSize: '0.88rem', fontWeight: '700', color: 'var(--blue-dark)' }}>{studentName(s.id)}</td>
+                      <td style={{ padding: '12px 16px', fontSize: '0.8rem', color: 'var(--text-2)' }}>{filiereName(s.idFiliere || s.filiereId)}</td>
                       <td style={{ padding: '12px 16px', textAlign: 'right' }}>
                         <span style={{ fontWeight: '800', color: parseFloat(s.rate) > 25 ? 'var(--danger)' : 'var(--orange)' }}>{s.rate}%</span>
                       </td>
@@ -127,7 +128,7 @@ const AdminDashboard = () => {
                 pendingReclamations.map(r => (
                   <div key={r.id} style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
-                      <div style={{ fontWeight: '700', fontSize: '0.9rem', color: 'var(--blue-dark)' }}>{studentName(r.studentId)}</div>
+                      <div style={{ fontWeight: '700', fontSize: '0.9rem', color: 'var(--blue-dark)' }}>{studentName(r.idEtudiant || r.studentId)}</div>
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-3)' }}>Motif: {r.description.length > 40 ? r.description.slice(0, 40) + '...' : r.description}</div>
                     </div>
                     <ArrowRight size={14} color="var(--text-3)" />
@@ -158,7 +159,7 @@ const AdminDashboard = () => {
                   {recentPFEs.map(p => (
                     <tr key={p.id} style={{ borderBottom: '1px solid var(--border)' }}>
                       <td style={{ padding: '12px 16px', fontSize: '0.85rem', fontWeight: '600', color: 'var(--blue-dark)', maxWidth: '250px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.titre}</td>
-                      <td style={{ padding: '12px 16px', fontSize: '0.8rem', color: 'var(--text-2)' }}>{teacherName(p.encadrantId)}</td>
+                      <td style={{ padding: '12px 16px', fontSize: '0.8rem', color: 'var(--text-2)' }}>{teacherName(p.idEncadrant || p.encadrantId)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -204,7 +205,7 @@ const AdminDashboard = () => {
                    {ann.urgente && <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: '3px', background: 'var(--danger)' }}></div>}
                    <div style={{ fontWeight: '700', fontSize: '0.88rem', color: 'var(--blue-dark)', marginBottom: '4px' }}>{ann.title}</div>
                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--text-3)' }}>
-                      <span style={{ fontWeight: '600', color: 'var(--blue-mid)' }}>Cible: {ann.target}</span>
+                      <span style={{ fontWeight: '600', color: 'var(--blue-mid)' }}>Cible: {ann.cible || ann.target}</span>
                       <span>{new Date(ann.createdAt).toLocaleDateString()}</span>
                    </div>
                 </div>

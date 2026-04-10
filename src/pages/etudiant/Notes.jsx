@@ -161,43 +161,40 @@ const Notes = () => {
 
   const isReadOnly = student.statut === 'ABANDONNE';
 
-  // Filtre server-side: l'étudiant ne consulte que ses propres notes (RG52)
-  // Notes visibles uniquement après publication par l'Admin (RG57)
   const myGrades = useMemo(() => {
-    return db.grades.filter(g => g.studentId === student.id && g.publiee);
-  }, [db.grades, student.id]);
+    return db.notes.filter(g => (g.idEtudiant === student.id || g.studentId === student.id) && g.publiee);
+  }, [db.notes, student.id]);
 
-  // Modules de la filière
-  const filiereModules = db.modules.filter(m => m.filiereId === student.filiereId);
+  const filiereModules = db.modules.filter(m => (m.idFiliere === student.idFiliere || m.filiereId === student.filiereId));
 
-  // Enrichir les modules avec les notes
   const modulesWithGrades = useMemo(() => {
     return filiereModules.map(mod => {
-      const grade = myGrades.find(g => g.moduleId === mod.id);
-      const moy = grade ? gradeAvg(grade.cc, grade.final, mod.coeffCC, mod.coeffEF) : null;
+      const grade = myGrades.find(g => (g.idModule === mod.id || g.moduleId === mod.id));
+      const moy = grade ? gradeAvg(grade.valeurCC || grade.cc, grade.valeurEF || grade.exam, mod.coeffCC || 0.4, mod.coeffEF || 0.6) : null;
       return { ...mod, grade, moy };
     });
   }, [filiereModules, myGrades, gradeAvg]);
 
-  // Réclamations actives par module (RG64)
   const reclamationsActives = useMemo(() => {
     const map = {};
-    db.reclamations.filter(r => r.studentId === student.id && (r.statut === 'SOUMISE' || r.statut === 'EN_COURS')).forEach(r => {
-      map[r.moduleId] = (map[r.moduleId] || 0) + 1;
+    db.reclamations.filter(r => (r.idEtudiant === student.id || r.studentId === student.id) && (r.statut === 'SOUMISE' || r.statut === 'EN_COURS')).forEach(r => {
+      const modId = r.idModule || r.moduleId;
+      map[modId] = (map[modId] || 0) + 1;
     });
     return map;
   }, [db.reclamations, student.id]);
 
-  const myReclamations = db.reclamations.filter(r => r.studentId === student.id);
+  const myReclamations = db.reclamations.filter(r => (r.idEtudiant === student.id || r.studentId === student.id));
 
   const handleSubmitReclamation = ({ moduleId, sujet, description, noteContestee }) => {
     const id = nextId('reclamations');
     save('reclamations', {
-      id, studentId: student.id, moduleId,
+      id, idEtudiant: student.id, idModule: moduleId,
       sujet, description, noteContestee,
       statut: 'SOUMISE', // RG60
+      dateDepot: new Date().toISOString(),
       createdAt: new Date().toISOString(),
-      reponse: null,
+      reponseEnseignant: null,
     });
     setShowReclamationForm(false);
     setToast({ type: 'success', msg: 'Réclamation soumise — Statut: SOUMISE. Vous serez notifié(e) de chaque changement de statut (RG63).' });
@@ -269,9 +266,8 @@ const Notes = () => {
                       <td style={{ textAlign: 'center' }}>{mod.coeff}</td>
                       {mod.grade ? (
                         <>
-                          {/* Notes en lecture seule — jamais dans un input éditable (RG6) */}
-                          <td style={{ textAlign: 'center', fontWeight: 600 }}>{mod.grade.cc.toFixed(1)}</td>
-                          <td style={{ textAlign: 'center', fontWeight: 600 }}>{mod.grade.final.toFixed(1)}</td>
+                          <td style={{ textAlign: 'center', fontWeight: 600 }}>{(mod.grade.valeurCC || mod.grade.cc).toFixed(1)}</td>
+                          <td style={{ textAlign: 'center', fontWeight: 600 }}>{(mod.grade.valeurEF || mod.grade.final).toFixed(1)}</td>
                           <td style={{ textAlign: 'center', fontWeight: 800, fontSize: '1.05rem', color: 'var(--blue-dark)' }}>
                             {mod.moy?.toFixed(2)}
                           </td>

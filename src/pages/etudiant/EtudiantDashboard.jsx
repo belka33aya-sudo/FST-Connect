@@ -9,7 +9,7 @@ const DAYS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
 /* ── MODULE 9: Dashboard Étudiant (Simplified) ── */
 const EtudiantDashboard = () => {
   const { currentUser } = useAuth();
-  const { db, moduleName, roomName } = useData();
+  const { db, moduleName, roomName, gradeAvg } = useData();
   const navigate = useNavigate();
 
   const student = db.etudiants.find(s => s.utilisateurId === currentUser.id);
@@ -22,35 +22,39 @@ const EtudiantDashboard = () => {
   // Prochains Examens
   const upcomingExams = useMemo(() => {
     return db.seances.filter(s =>
-      (s.idGroupe === student.idGroupeTD || s.idGroupe === student.idGroupeTP) &&
+      (s.idGroupe === student.idGroupeTD || s.idGroupe === student.idGroupeTP || s.groupId === student.groupTDId) &&
       s.type === 'Examen' &&
       s.statut !== 'ANNULEE'
     ).slice(0, 3);
   }, [db.seances, student]);
 
   // Notes Publiées
-  const myGrades = useMemo(() => db.notes.filter(g => g.idEtudiant === student.id), [db.notes, student.id]);
+  const myGrades = useMemo(() => db.notes.filter(g => (g.idEtudiant === student.id || g.studentId === student.id) && g.publiee), [db.notes, student.id]);
 
   // Annonces
   const myAnnonces = useMemo(() => {
     const filtered = db.annonces.filter(a =>
-      a.cible === 'Tous' || (a.cible === 'filiere' && a.idFiliere === student.idFiliere)
+      a.cible === 'Tous' || (a.cible === 'filiere' && (a.idFiliere === student.idFiliere || a.filiereId === student.filiereId))
     );
     return [...filtered].sort((a, b) => {
-      if (a.urgent && !b.urgent) return -1;
-      if (!a.urgent && b.urgent) return 1;
-      return new Date(b.dateCreation) - new Date(a.dateCreation);
+      const urgentA = a.urgent || a.urgente;
+      const urgentB = b.urgent || b.urgente;
+      if (urgentA && !urgentB) return -1;
+      if (!urgentA && urgentB) return 1;
+      const dateA = new Date(a.dateCreation || a.createdAt);
+      const dateB = new Date(b.dateCreation || b.createdAt);
+      return dateB - dateA;
     }).slice(0, 5);
-  }, [db.annonces, student.idFiliere]);
+  }, [db.annonces, student.idFiliere, student.filiereId]);
 
   // Documents récents
   const recentDocs = useMemo(() => {
-    const studentModules = db.modules.filter(m => m.idFiliere === student.idFiliere).map(m => m.id);
+    const studentModules = db.modules.filter(m => (m.idFiliere === student.idFiliere || m.filiereId === student.filiereId)).map(m => m.id);
     return db.documents
       .filter(d => studentModules.includes(d.idModule || d.moduleId))
       .sort((a, b) => new Date(b.dateUpload) - new Date(a.dateUpload))
       .slice(0, 4);
-  }, [db.documents, db.modules, student.idFiliere]);
+  }, [db.documents, db.modules, student.idFiliere, student.filiereId]);
 
   // PFE / Stage (pour les deadlines)
   const myPFE = db.pfes.find(p => p.idEtudiant === student.id || (p.studentIds && p.studentIds.includes(student.id)));
@@ -62,7 +66,7 @@ const EtudiantDashboard = () => {
         <div className="page-hero-left">
           <h2 className="page-hero-title">Content de vous revoir, {user.prenom}</h2>
           <p className="page-hero-sub">
-            {db.filieres.find(f => f.id === student.idFiliere)?.intitule} • Année {student.anneeInscription}
+            {db.filieres.find(f => f.id === (student.idFiliere || student.filiereId))?.intitule} • Année {student.anneeInscription}
           </p>
         </div>
         <div className="page-hero-right">
@@ -98,15 +102,15 @@ const EtudiantDashboard = () => {
                 myAnnonces.map(ann => (
                   <div key={ann.id} style={{
                     padding: '1rem 1.25rem', borderBottom: '1px solid var(--border)',
-                    borderLeft: ann.urgente ? '4px solid var(--danger)' : '4px solid transparent',
-                    background: ann.urgente ? 'rgba(239,68,68,.02)' : 'transparent',
+                    borderLeft: (ann.urgent || ann.urgente) ? '4px solid var(--danger)' : '4px solid transparent',
+                    background: (ann.urgent || ann.urgente) ? 'rgba(239,68,68,.02)' : 'transparent',
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem', marginBottom: '.25rem' }}>
-                      {ann.urgente && <span className="badge badge-red" style={{ fontSize: '.65rem' }}>URGENT</span>}
-                      <span style={{ fontWeight: 700, fontSize: '.9rem', color: 'var(--text)' }}>{ann.title}</span>
+                      {(ann.urgent || ann.urgente) && <span className="badge badge-red" style={{ fontSize: '.65rem' }}>URGENT</span>}
+                      <span style={{ fontWeight: 700, fontSize: '.9rem', color: 'var(--text)' }}>{ann.titre || ann.title}</span>
                     </div>
                     <div style={{ fontSize: '.8rem', color: 'var(--text-3)' }}>
-                      Posté le {new Date(ann.createdAt).toLocaleDateString('fr-FR')}
+                      Posté le {new Date(ann.dateCreation || ann.createdAt).toLocaleDateString('fr-FR')}
                     </div>
                   </div>
                 ))
@@ -131,8 +135,8 @@ const EtudiantDashboard = () => {
                   <div key={doc.id} className="doc-item" style={{ cursor: 'pointer', marginBottom: '.5rem' }}>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: .6, color: 'var(--blue-mid)' }}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600, fontSize: '.85rem' }}>{doc.title}</div>
-                      <div style={{ fontSize: '.7rem', color: 'var(--text-3)' }}>{moduleName(doc.moduleId)} • {doc.uploadedAt}</div>
+                      <div style={{ fontWeight: 600, fontSize: '.85rem' }}>{doc.titre || doc.title}</div>
+                      <div style={{ fontSize: '.7rem', color: 'var(--text-3)' }}>{moduleName(doc.idModule || doc.moduleId)} • {doc.dateUpload}</div>
                     </div>
                   </div>
                 ))
@@ -157,11 +161,11 @@ const EtudiantDashboard = () => {
                 <p style={{ fontSize: '.85rem', color: 'var(--text-3)', textAlign: 'center', padding: '1.5rem 0' }}>En attente de publication.</p>
               ) : (
                 myGrades.slice(0, 4).map(g => {
-                  const mod = db.modules.find(m => m.id === g.moduleId);
-                  const avg = gradeAvg(g.cc, g.final, mod?.coeffCC, mod?.coeffEF);
+                  const mod = db.modules.find(m => m.id === (g.idModule || g.moduleId));
+                  const avg = gradeAvg(g.valeurCC || g.cc, g.valeurEF || g.exam, mod?.coeffCC || 0.4, mod?.coeffEF || 0.6);
                   return (
                     <div key={g.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '.75rem 0', borderBottom: '1px solid var(--border)' }}>
-                      <div style={{ fontSize: '.82rem', fontWeight: 600 }}>{mod?.title}</div>
+                      <div style={{ fontSize: '.82rem', fontWeight: 600 }}>{mod?.intitule || mod?.title}</div>
                       <div className={avg >= 10 ? 'grade-pass' : 'grade-fail'}>{avg.toFixed(2)}</div>
                     </div>
                   );

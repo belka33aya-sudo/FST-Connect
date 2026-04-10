@@ -9,8 +9,8 @@ const Profil = () => {
   const [errorMsg, setErrorMsg] = useState('');
 
   const student = db.etudiants.find(s => s.utilisateurId === currentUser.id);
-  const filiere = student ? db.filieres.find(f => f.id === student.idFiliere) : null;
-  const group = student ? db.groupes.find(g => g.id === student.idGroupeTD) : null;
+  const filiere = student ? db.filieres.find(f => f.id === (student.idFiliere || student.filiereId)) : null;
+  const group = student ? db.groupes.find(g => g.id === (student.idGroupeTD || student.groupTDId)) : null;
   const user = db.utilisateurs.find(u => u.id === currentUser.id);
 
   const [phone, setPhone] = useState(user?.telephone || '');

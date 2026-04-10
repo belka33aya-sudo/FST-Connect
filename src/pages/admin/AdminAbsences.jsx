@@ -19,23 +19,28 @@ const AdminAbsences = () => {
   const studentStats = useMemo(() => {
     const stats = {};
     db.absences.forEach(a => {
-      if (!stats[a.studentId]) stats[a.studentId] = { total: 0, nonJustified: 0, list: [] };
-      stats[a.studentId].total++;
-      if (!a.justified) stats[a.studentId].nonJustified++;
-      stats[a.studentId].list.push(a);
+      const studentId = a.idEtudiant || a.studentId;
+      const isJustified = a.justifie !== undefined ? a.justifie : a.justified;
+      
+      if (!stats[studentId]) stats[studentId] = { total: 0, nonJustified: 0, list: [] };
+      stats[studentId].total++;
+      if (!isJustified) stats[studentId].nonJustified++;
+      stats[studentId].list.push(a);
     });
     return stats;
   }, [db.absences]);
 
   const filteredStudents = useMemo(() => {
-    return db.students.filter(s => {
+    return db.etudiants.filter(s => {
       const stats = studentStats[s.id] || { total: 0 };
-      const matchesFiliere = !filiereFilter || s.filiereId === parseInt(filiereFilter);
-      const matchesSearch = !searchTerm || s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                           (s.CNE || s.cne || '').toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesFiliere = !filiereFilter || (s.idFiliere || s.filiereId) === parseInt(filiereFilter);
+      const studentUser = db.utilisateurs.find(u => u.id === s.utilisateurId);
+      const sName = studentUser ? `${studentUser.prenom} ${studentUser.nom}` : (s.nom || s.name || '');
+      const matchesSearch = !searchTerm || sName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                           (s.cne || '').toLowerCase().includes(searchTerm.toLowerCase());
       return stats.total > 0 && matchesFiliere && matchesSearch;
     }).sort((a,b) => (studentStats[b.id]?.total || 0) - (studentStats[a.id]?.total || 0));
-  }, [db.students, studentStats, filiereFilter, searchTerm]);
+  }, [db.etudiants, db.utilisateurs, studentStats, filiereFilter, searchTerm]);
 
   // --- Handlers ---
   const handleExportReport = () => {
@@ -116,15 +121,15 @@ const AdminAbsences = () => {
             </thead>
             <tbody>
               {filteredStudents.map(s => {
-                const stats = studentStats[s.id];
-                const riskLevel = stats.total >= 5 ? 'Critique' : stats.total >= 3 ? 'Moyen' : 'Faible';
+                const stats = studentStats[s.id] || { total: 0, nonJustified: 0 };
+                const riskLevel = stats.total >= 5 ? 'Critique' : stats.total >= 3 ? 'Alerte' : 'Normal';
                 return (
                   <tr key={s.id} className="hover-row">
                     <td style={{ padding: '15px 20px' }}>
-                      <div style={{ fontWeight: '700', color: 'var(--blue-dark)' }}>{s.name}</div>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--text-3)' }}>{s.CNE || s.cne}</div>
+                      <div style={{ fontWeight: '700', color: 'var(--blue-dark)' }}>{studentName(s.id)}</div>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-3)' }}>{s.cne}</div>
                     </td>
-                    <td><span className="badge badge-gray">{filiereName(s.filiereId)}</span></td>
+                    <td><span className="badge badge-gray">{filiereName(s.idFiliere || s.filiereId)}</span></td>
                     <td style={{ textAlign: 'center' }}>
                       <span style={{ fontWeight: '800', fontSize: '1.1rem', color: stats.total >= 5 ? 'var(--danger)' : stats.total >= 3 ? 'var(--orange)' : 'var(--success)' }}>{stats.total}</span>
                     </td>
@@ -191,23 +196,25 @@ const AdminAbsences = () => {
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   {studentStats[selectedStudent.id]?.list.map((abs, idx) => {
-                    const session = db.sessions.find(ses => ses.id === abs.sessionId);
+                    const sessionId = abs.idSeance || abs.sessionId;
+                    const session = db.seances.find(ses => ses.id === sessionId) || db.sessions.find(ses => ses.id === sessionId);
+                    const isAbsJustified = abs.justifie !== undefined ? abs.justifie : abs.justified;
                     return (
                       <div key={idx} style={{ padding: '16px', borderRadius: '12px', background: 'white', border: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
-                          <div style={{ fontWeight: '700', color: 'var(--blue-dark)', fontSize: '0.9rem' }}>{moduleName(session?.moduleId)}</div>
+                          <div style={{ fontWeight: '700', color: 'var(--blue-dark)', fontSize: '0.9rem' }}>{moduleName(session?.idModule || session?.moduleId)}</div>
                           <div style={{ display: 'flex', gap: '12px', marginTop: '4px', fontSize: '0.75rem', color: 'var(--text-3)' }}>
                             <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Calendar size={12} /> {abs.date}</span>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Clock size={12} /> {session?.startSlot}</span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Clock size={12} /> {session?.heureDebut || session?.startSlot}</span>
                           </div>
                         </div>
                         <div>
                           <button 
-                            className={`btn btn-sm ${abs.justified ? 'btn-ghost' : 'btn-primary'}`}
+                            className={`btn btn-sm ${isAbsJustified ? 'btn-ghost' : 'btn-primary'}`}
                             style={{ fontSize: '0.7rem', height: '28px', padding: '0 12px' }}
                             onClick={() => handleToggleJustification(abs)}
                           >
-                            {abs.justified ? 'Justifiée' : 'Justifier'}
+                            {isAbsJustified ? 'Justifiée' : 'Justifier'}
                           </button>
                         </div>
                       </div>

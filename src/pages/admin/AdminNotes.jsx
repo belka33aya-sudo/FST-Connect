@@ -18,14 +18,18 @@ const AdminNotes = () => {
   const [formData, setFormData] = useState({ cc: '', exam: '', final: '' });
 
   const grades = useMemo(() => {
-    return db.grades.filter(g => {
-      const student = db.students.find(s => s.id === g.studentId);
-      const matchesFiliere = !filiereFilter || student?.filiereId === parseInt(filiereFilter);
-      const matchesSearch = !search || student?.name.toLowerCase().includes(search.toLowerCase()) || 
-                           (student?.CNE || student?.cne || '').toLowerCase().includes(search.toLowerCase());
+    const list = db.notes || db.grades || [];
+    return list.filter(g => {
+      const studentId = g.idEtudiant || g.studentId;
+      const student = db.etudiants?.find(s => s.id === studentId) || db.students?.find(s => s.id === studentId);
+      const matchesFiliere = !filiereFilter || (student?.idFiliere || student?.filiereId) === parseInt(filiereFilter);
+      const studentUser = db.utilisateurs.find(u => u.id === student?.utilisateurId);
+      const sName = studentUser ? `${studentUser.prenom} ${studentUser.nom}` : (student?.nom || student?.name || '');
+      const matchesSearch = !search || sName.toLowerCase().includes(search.toLowerCase()) || 
+                           (student?.cne || '').toLowerCase().includes(search.toLowerCase());
       return matchesFiliere && matchesSearch;
     });
-  }, [db.grades, db.students, filiereFilter, search]);
+  }, [db.notes, db.grades, db.etudiants, db.students, db.utilisateurs, filiereFilter, search]);
 
   // --- Handlers ---
   const handleExportPV = () => {
@@ -38,9 +42,9 @@ const AdminNotes = () => {
   const handleOpenDetail = (grade) => {
     setSelectedGrade(grade);
     setFormData({ 
-      cc: grade.cc || '', 
-      exam: grade.exam || '', 
-      final: grade.final || '' 
+      cc: grade.valeurCC || grade.cc || '', 
+      exam: grade.valeurEF || grade.exam || '', 
+      final: grade.moyenne || grade.final || '' 
     });
     setShowPanel(true);
   };
@@ -49,11 +53,17 @@ const AdminNotes = () => {
     e.preventDefault();
     const updated = {
       ...selectedGrade,
+      idEtudiant: selectedGrade.idEtudiant || selectedGrade.studentId,
+      idModule: selectedGrade.idModule || selectedGrade.moduleId,
+      valeurCC: parseFloat(formData.cc),
+      valeurEF: parseFloat(formData.exam),
+      moyenne: parseFloat(formData.final),
+      // Legacy keep
       cc: parseFloat(formData.cc),
       exam: parseFloat(formData.exam),
       final: parseFloat(formData.final)
     };
-    save('grades', updated);
+    save('notes', updated);
     setShowPanel(false);
     success('Notes rectifiées', 'La moyenne a été mise à jour dans le système.');
   };
@@ -111,22 +121,25 @@ const AdminNotes = () => {
             </thead>
             <tbody>
               {grades.map(g => {
-                const s = db.students.find(st => st.id === g.studentId);
-                const isValidation = g.final >= 12;
+                const sId = g.idEtudiant || g.studentId;
+                const mId = g.idModule || g.moduleId;
+                const s = db.etudiants?.find(st => st.id === sId) || db.students?.find(st => st.id === sId);
+                const valFinal = g.moyenne || g.final || 0;
+                const isValidation = valFinal >= 12;
                 return (
                   <tr key={g.id} className="hover-row">
                     <td style={{ padding: '15px 20px' }}>
-                      <div style={{ fontWeight: '700', color: 'var(--blue-dark)' }}>{studentName(g.studentId)}</div>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--text-3)' }}>{s?.CNE || s?.cne}</div>
+                      <div style={{ fontWeight: '700', color: 'var(--blue-dark)' }}>{studentName(sId)}</div>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-3)' }}>{s?.cne}</div>
                     </td>
-                    <td><span className="badge badge-gray">{filiereName(s?.filiereId)}</span></td>
-                    <td><div style={{ fontSize: '0.85rem', color: 'var(--text-2)', fontWeight: '600' }}>{moduleName(g.moduleId)}</div></td>
+                    <td><span className="badge badge-gray">{filiereName(s?.idFiliere || s?.filiereId)}</span></td>
+                    <td><div style={{ fontSize: '0.85rem', color: 'var(--text-2)', fontWeight: '600' }}>{moduleName(mId)}</div></td>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <div style={{ fontSize: '1.1rem', fontWeight: '800', color: isValidation ? 'var(--success)' : 'var(--danger)' }}>
-                          {g.final.toFixed(2)}
+                          {valFinal.toFixed(2)}
                         </div>
-                        {g.final > 15 ? <TrendingUp size={14} color="var(--success)" /> : g.final < 10 ? <TrendingDown size={14} color="var(--danger)" /> : <Minus size={14} color="var(--text-3)" />}
+                        {valFinal > 15 ? <TrendingUp size={14} color="var(--success)" /> : valFinal < 10 ? <TrendingDown size={14} color="var(--danger)" /> : <Minus size={14} color="var(--text-3)" />}
                       </div>
                     </td>
                     <td>
@@ -156,7 +169,7 @@ const AdminNotes = () => {
           <div className="side-panel-header">
             <div>
               <h3 className="side-panel-title">Détail des Évaluations</h3>
-              <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-3)' }}>{studentName(selectedGrade?.studentId)}</p>
+              <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-3)' }}>{studentName(selectedGrade?.idEtudiant || selectedGrade?.studentId)}</p>
             </div>
             <button className="modal-close" onClick={() => setShowPanel(false)}><X size={20} /></button>
           </div>
@@ -165,7 +178,7 @@ const AdminNotes = () => {
               <form id="gradeForm" onSubmit={handleSaveNotes} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                 <div style={{ padding: '20px', background: 'var(--bg)', borderRadius: '16px', border: '1px solid var(--border)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', color: 'var(--blue-dark)', fontWeight: '800', fontSize: '0.8rem', textTransform: 'uppercase' }}>
-                    <GraduationCap size={16} /> Module : {moduleName(selectedGrade.moduleId)}
+                    <GraduationCap size={16} /> Module : {moduleName(selectedGrade.idModule || selectedGrade.moduleId)}
                   </div>
                   
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>

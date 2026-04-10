@@ -8,7 +8,7 @@ const TIME_SLOTS  = ['08:00','09:30','11:00','13:30','15:00','16:30'];
 
 const MonPlanning = () => {
   const { currentUser } = useAuth();
-  const { db, save, moduleName, roomName, groupName, filiereName } = useData();
+  const { db, save, moduleName, roomName, groupName, filiereName, teacherName } = useData();
   const navigate = useNavigate();
   const [weekOffset, setWeekOffset] = useState(0);
 
@@ -19,12 +19,12 @@ const MonPlanning = () => {
   const [absentIds, setAbsentIds] = useState([]);
   const [toast, setToast] = useState(null);
 
-  const teacherId = currentUser?.linkedId;
-  const teacher = db.teachers.find(t => t.id === teacherId);
+  const teacher = useMemo(() => db.enseignants.find(t => t.utilisateurId === currentUser.id), [db.enseignants, currentUser.id]);
+  const teacherId = teacher?.id;
 
   const mySessions = useMemo(() => {
-    return db.sessions.filter(s => s.teacherId === teacherId);
-  }, [db.sessions, teacherId]);
+    return db.seances.filter(s => (s.idEnseignant === teacherId || s.teacherId === teacherId));
+  }, [db.seances, teacherId]);
 
   const getWeekRange = (offset) => {
     const now = new Date();
@@ -39,13 +39,13 @@ const MonPlanning = () => {
   const weekLabel = weekOffset === 0 ? 'Semaine en cours' : weekOffset === -1 ? 'Semaine précédente' : 'Semaine suivante';
   const rangeText = `${monday.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })} – ${saturday.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}`;
 
-  const getSession = (day, slot) => mySessions.find(s => s.day === day && s.startSlot === slot);
+  const getSession = (day, slot) => mySessions.find(s => (s.jourNum === day || s.day === day) && (s.heureDebut === slot || s.startSlot === slot));
 
   // ── Handlers ──
   const openAppel = (session) => {
     setActiveSession(session);
-    const existing = db.absences.filter(a => a.sessionId === session.id);
-    setAbsentIds(existing.map(a => a.studentId));
+    const existing = db.absences.filter(a => (a.idSeance === session.id || a.sessionId === session.id));
+    setAbsentIds(existing.map(a => (a.idEtudiant || a.studentId)));
     setShowAppelModal(true);
   };
 
@@ -57,12 +57,15 @@ const MonPlanning = () => {
   const handleSaveAppel = () => {
     // In a real app, we'd sync the whole list. Here we update the mock DB.
     absentIds.forEach(sid => {
-      const exists = db.absences.find(a => a.sessionId === activeSession.id && a.studentId === sid);
+      const exists = db.absences.find(a => (a.idSeance === activeSession.id || a.sessionId === activeSession.id) && (a.idEtudiant === sid || a.studentId === sid));
       if (!exists) {
         save('absences', {
           id: Date.now() + sid,
+          idEtudiant: sid,
           studentId: sid,
+          idSeance: activeSession.id,
           sessionId: activeSession.id,
+          dateSaisie: new Date().toISOString().split('T')[0],
           date: new Date().toISOString().split('T')[0],
           statut: 'INJUSTIFIEE',
           justificatif: null
@@ -75,7 +78,7 @@ const MonPlanning = () => {
   };
 
   const handleSaveEdit = () => {
-    save('sessions', activeSession);
+    save('seances', activeSession);
     setToast({ msg: "La séance a été mise à jour." });
     setShowEditModal(false);
     setTimeout(() => setToast(null), 3000);
@@ -87,7 +90,11 @@ const MonPlanning = () => {
 
   if (!teacher) return <div className="empty-state"><p>Profil enseignant introuvable.</p></div>;
 
-  const studentsInGroup = activeSession ? db.students.filter(s => s.groupTDId === activeSession.groupId || s.groupTPId === activeSession.groupId) : [];
+  const studentsInGroup = useMemo(() => {
+    if (!activeSession) return [];
+    const groupId = activeSession.idGroupe || activeSession.groupId;
+    return db.etudiants.filter(s => s.idGroupeTD === groupId || s.idGroupeTP === groupId || s.groupTDId === groupId || s.groupTPId === groupId);
+  }, [db.etudiants, activeSession]);
 
   return (
     <div className="planning-container animate-up">
@@ -102,7 +109,7 @@ const MonPlanning = () => {
       <div className="page-hero" style={{ marginBottom: '2rem' }}>
         <div className="page-hero-left">
           <h2 className="page-hero-title">Mon Planning</h2>
-          <p className="page-hero-sub">Portail de gestion pédagogique — {teacher.name}</p>
+          <p className="page-hero-sub">Portail de gestion pédagogique — {teacherName(teacher.id)}</p>
         </div>
         <div className="page-hero-right" style={{ display: 'flex', gap: '0.75rem' }}>
           <button className="btn btn-ghost" onClick={() => window.print()}>
@@ -165,11 +172,11 @@ const MonPlanning = () => {
                           {isAnnulee && <div className="session-annulee-stamp">Annulé</div>}
                           <div>
                             <div className="session-type-tag">{sess.type}</div>
-                            <div className="session-title" title={mod?.title}>{mod?.title}</div>
+                            <div className="session-title" title={moduleName(sess.idModule || sess.moduleId)}>{moduleName(sess.idModule || sess.moduleId)}</div>
                           </div>
                           <div className="session-meta">
-                            <span>{groupName(sess.groupId)}</span>
-                            <span>{roomName(sess.roomId)}</span>
+                            <span>{groupName(sess.idGroupe || sess.groupId)}</span>
+                            <span>{roomName(sess.idSalle || sess.roomId)}</span>
                           </div>
                           {sess.isRattrapage && (
                             <div style={{ position:'absolute', top: -5, right: -5, background: 'var(--warning)', color: '#fff', fontSize: '10px', width: 18, height: 18, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>R</div>
@@ -205,19 +212,18 @@ const MonPlanning = () => {
                 </tr>
               </thead>
               <tbody>
-                {[...mySessions].sort((a, b) => a.day - b.day || a.startSlot.localeCompare(b.startSlot)).map(s => {
-                  const mod = db.modules.find(m => m.id === s.moduleId);
+                {[...mySessions].sort((a, b) => (a.jourNum || a.day) - (b.jourNum || b.day) || (a.heureDebut || a.startSlot).localeCompare(b.heureDebut || b.startSlot)).map(s => {
                   const isAnnulee = s.statut === 'ANNULEE';
                   return (
                     <tr key={s.id} style={{ opacity: isAnnulee ? 0.5 : 1 }}>
-                      <td style={{ fontWeight: 700, color: 'var(--blue-dark)' }}>{DAYS_LABELS[s.day - 1]}</td>
-                      <td style={{ fontWeight: 600, color: '#475569' }}>{s.startSlot} – {s.endSlot}</td>
+                      <td style={{ fontWeight: 700, color: 'var(--blue-dark)' }}>{DAYS_LABELS[(s.jourNum || s.day) - 1]}</td>
+                      <td style={{ fontWeight: 600, color: '#475569' }}>{s.heureDebut || s.startSlot} – {s.heureFin || s.endSlot}</td>
                       <td>
-                        <div style={{ fontWeight: 700, color: '#1e293b' }}>{mod?.title}</div>
-                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>{filiereName(mod?.filiereId)}</div>
+                        <div style={{ fontWeight: 700, color: '#1e293b' }}>{moduleName(s.idModule || s.moduleId)}</div>
+                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>{filiereName(db.modules.find(m => m.id === (s.idModule || s.moduleId))?.idFiliere || db.modules.find(m => m.id === (s.idModule || s.moduleId))?.filiereId)}</div>
                       </td>
-                      <td><span className="badge-refined" style={{ background: '#f1f5f9', color: '#475569' }}>{groupName(s.groupId)}</span></td>
-                      <td style={{ fontWeight: 500 }}>{roomName(s.roomId)}</td>
+                      <td><span className="badge-refined" style={{ background: '#f1f5f9', color: '#475569' }}>{groupName(s.idGroupe || s.groupId)}</span></td>
+                      <td style={{ fontWeight: 500 }}>{roomName(s.idSalle || s.roomId)}</td>
                       <td>
                         <span className={`badge-refined session-${s.type.toLowerCase()}`} style={{ border: 'none' }}>
                           {s.type}
@@ -237,27 +243,30 @@ const MonPlanning = () => {
         <div className="modal-overlay" onClick={() => setShowAppelModal(false)}>
           <div className="modal-box modal-box-lg" onClick={e => e.stopPropagation()}>
             <div className="modal-hdr">
-              <h3 className="modal-hdr-title">Feuille d'appel — {moduleName(activeSession.moduleId)}</h3>
+              <h3 className="modal-hdr-title">Feuille d'appel — {moduleName(activeSession.idModule || activeSession.moduleId)}</h3>
               <button className="modal-close" onClick={() => setShowAppelModal(false)}>×</button>
             </div>
             <div className="modal-bdy" style={{ maxHeight: '60vh' }}>
               <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', padding: '1rem', background: '#f8fafc', borderRadius: '12px' }}>
-                <div><strong>Groupe:</strong> {groupName(activeSession.groupId)}</div>
-                <div><strong>Salle:</strong> {roomName(activeSession.roomId)}</div>
+                <div><strong>Groupe:</strong> {groupName(activeSession.idGroupe || activeSession.groupId)}</div>
+                <div><strong>Salle:</strong> {roomName(activeSession.idSalle || activeSession.roomId)}</div>
                 <div style={{ marginLeft: 'auto' }}><strong>Date:</strong> {new Date().toLocaleDateString('fr-FR')}</div>
               </div>
               <div className="ens-sessions-list">
-                {studentsInGroup.map(student => (
-                  <div key={student.id} className="presence-item" style={{ padding: '0.75rem 0' }}>
-                    <div className="presence-name" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                      <div className="ens-absence-avatar" style={{ width: 32, height: 32, fontSize: '0.7rem' }}>
-                        {student.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                {studentsInGroup.map(student => {
+                  const u = db.utilisateurs.find(user => user.id === student.utilisateurId);
+                  const fullName = u ? `${u.prenom} ${u.nom}` : (student.name || '—');
+                  return (
+                    <div key={student.id} className="presence-item" style={{ padding: '0.75rem 0' }}>
+                      <div className="presence-name" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                        <div className="ens-absence-avatar" style={{ width: 32, height: 32, fontSize: '0.7rem' }}>
+                          {fullName.split(' ').map(n => n[0]).join('').toUpperCase()}
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 700 }}>{fullName}</div>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-3)' }}>{student.CNE}</div>
+                        </div>
                       </div>
-                      <div>
-                        <div style={{ fontWeight: 700 }}>{student.name}</div>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--text-3)' }}>{student.CNE}</div>
-                      </div>
-                    </div>
                     <div className="presence-toggle">
                       <button 
                         className={`ptoggle-btn present ${!absentIds.includes(student.id) ? 'active' : ''}`}
@@ -269,7 +278,8 @@ const MonPlanning = () => {
                       >Absent</button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
             <div className="modal-footer">
@@ -305,10 +315,10 @@ const MonPlanning = () => {
                 <label className="form-label">Salle</label>
                 <select 
                   className="form-control"
-                  value={activeSession.roomId}
-                  onChange={e => setActiveSession({...activeSession, roomId: parseInt(e.target.value)})}
+                  value={activeSession.idSalle || activeSession.roomId}
+                  onChange={e => setActiveSession({...activeSession, idSalle: parseInt(e.target.value), roomId: parseInt(e.target.value)})}
                 >
-                  {db.rooms.map(r => <option key={r.id} value={r.id}>{r.name} ({r.type})</option>)}
+                  {db.salles.map(r => <option key={r.id} value={r.id}>{r.nom || r.name} ({r.type})</option>)}
                 </select>
               </div>
               <div className="form-group">

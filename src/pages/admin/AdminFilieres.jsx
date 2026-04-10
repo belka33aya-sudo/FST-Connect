@@ -19,17 +19,19 @@ const AdminFilieres = () => {
     db.filieres.find(f => f.id === selectedFiliereId), 
   [db.filieres, selectedFiliereId]);
 
-  const groups = useMemo(() => 
-    db.groups.filter(g => g.filiereId === selectedFiliereId),
-  [db.groups, selectedFiliereId]);
+  const groups = useMemo(() => {
+    const list = db.groupesTD || db.groups || [];
+    return list.filter(g => (g.idFiliere || g.filiereId) === selectedFiliereId);
+  }, [db.groupesTD, db.groups, selectedFiliereId]);
 
   const filiereStats = useMemo(() => {
     const stats = {};
+    const studentsList = db.etudiants || db.students || [];
     db.filieres.forEach(f => {
-      stats[f.id] = db.students.filter(s => s.filiereId === f.id).length;
+      stats[f.id] = studentsList.filter(s => (s.idFiliere || s.filiereId) === f.id).length;
     });
     return stats;
-  }, [db.filieres, db.students]);
+  }, [db.filieres, db.etudiants, db.students]);
 
   const handleEditFiliere = (f) => {
     setEditingFiliere(f);
@@ -46,7 +48,17 @@ const AdminFilieres = () => {
 
   const handleSubmitFiliere = (e) => {
     e.preventDefault();
-    const data = { ...filiereData, id: editingFiliere ? editingFiliere.id : nextId('filieres') };
+    const data = { 
+      ...filiereData, 
+      id: editingFiliere ? editingFiliere.id : nextId('filieres'),
+      nom: filiereData.nom || filiereData.name,
+      niveauEtude: filiereData.niveauEtude || filiereData.level,
+      nombreSemestres: parseInt(filiereData.nombreSemestres || filiereData.semesters),
+      // Legacy
+      name: filiereData.nom || filiereData.name,
+      level: filiereData.niveauEtude || filiereData.level,
+      semesters: parseInt(filiereData.nombreSemestres || filiereData.semesters)
+    };
     save('filieres', data);
     setShowFilierePanel(false);
     success(editingFiliere ? 'Mise à jour' : 'Créée', 'Filière enregistrée.');
@@ -55,9 +67,17 @@ const AdminFilieres = () => {
 
   const handleSubmitGroup = (e) => {
     e.preventDefault();
-    save('groups', { ...groupData, id: nextId('groups'), filiereId: selectedFiliereId });
+    const data = { 
+        ...groupData, 
+        id: nextId('groupesTD'), 
+        idFiliere: selectedFiliereId,
+        filiereId: selectedFiliereId,
+        typeGroup: groupData.typeGroup || groupData.type,
+        capacite: parseInt(groupData.capacite || groupData.capacity)
+    };
+    save('groupesTD', data);
     setShowGroupPanel(false);
-    success('Groupe Ajouté', `Le groupe ${groupData.name} est prêt.`);
+    success('Groupe Ajouté', `Le groupe ${groupData.nom || groupData.name} est prêt.`);
   };
 
   return (
@@ -97,7 +117,7 @@ const AdminFilieres = () => {
                   <span style={{ fontWeight: '700', color: 'var(--blue-dark)', fontSize: '0.95rem' }}>{f.code}</span>
                   <span style={{ fontSize: '0.7rem', fontWeight: '800', background: 'var(--bg)', padding: '2px 6px', borderRadius: '4px', color: 'var(--text-3)' }}>{filiereStats[f.id] || 0}</span>
                 </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-2)', marginTop: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.name}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-2)', marginTop: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.nom || f.name}</div>
               </div>
             ))}
           </div>
@@ -138,11 +158,11 @@ const AdminFilieres = () => {
                   {groups.map(g => (
                     <div key={g.id} style={{ padding: '16px', borderRadius: '12px', background: 'var(--bg)', border: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
-                        <div style={{ fontWeight: '800', color: 'var(--blue-dark)' }}>{g.name}</div>
-                        <div style={{ fontSize: '0.7rem', fontWeight: '700', color: 'var(--text-3)', textTransform: 'uppercase' }}>{g.type}</div>
+                        <div style={{ fontWeight: '800', color: 'var(--blue-dark)' }}>{g.nom || g.name}</div>
+                        <div style={{ fontSize: '0.7rem', fontWeight: '700', color: 'var(--text-3)', textTransform: 'uppercase' }}>{g.typeGroup || g.type}</div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
-                         <div style={{ fontSize: '0.9rem', fontWeight: '800', color: 'var(--blue-mid)' }}>{db.students.filter(s => (g.type === 'TD' ? s.groupTDId : s.groupTPId) === g.id).length}</div>
+                         <div style={{ fontSize: '0.9rem', fontWeight: '800', color: 'var(--blue-mid)' }}>{(db.etudiants || db.students || []).filter(s => (s.idGroupeTD || s.groupTDId) === g.id).length}</div>
                          <div style={{ fontSize: '0.65rem', color: 'var(--text-3)' }}>ÉTUDIANTS</div>
                       </div>
                     </div>

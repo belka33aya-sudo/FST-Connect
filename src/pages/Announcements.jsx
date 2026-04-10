@@ -4,35 +4,36 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 
 const Announcements = () => {
-  const { db, filiereName, teacherName, save } = useData();
-  const { currentUser, isStudent, can } = useAuth();
+  const { db, filiereName, teacherName, save, getStudentByUserId } = useData();
+  const { currentUser, isStudent } = useAuth();
   const { info } = useToast();
 
   const filteredAnnouncements = useMemo(() => {
-    let list = [...db.announcements];
+    let list = [...(db.annonces || db.announcements || [])];
     if (isStudent()) {
-      const student = db.students.find(s => s.id === currentUser.linkedId);
-      const f = student ? filiereName(student.filiereId) : null;
-      list = list.filter(a => a.target === 'all' || a.target === f);
+      const student = getStudentByUserId(currentUser.id);
+      const f = student ? filiereName(student.idFiliere || student.filiereId) : null;
+      list = list.filter(a => (a.cible || a.target) === 'all' || (a.cible || a.target) === 'Tous' || (a.cible || a.target) === f);
     }
     // Sort urgent first, then newest
     return list.sort((a, b) => 
-      (b.urgente ? 1 : 0) - (a.urgente ? 1 : 0) || 
-      new Date(b.createdAt) - new Date(a.createdAt)
+      ((b.urgente || b.urgent) ? 1 : 0) - ((a.urgente || a.urgent) ? 1 : 0) || 
+      new Date(b.dateCreation || b.createdAt) - new Date(a.dateCreation || a.createdAt)
     );
-  }, [db.announcements, currentUser, isStudent, filiereName, db.students]);
+  }, [db.annonces, db.announcements, currentUser, isStudent, filiereName, getStudentByUserId]);
 
   useEffect(() => {
     // Mark as read
     if (currentUser) {
-      db.announcements.forEach(a => {
-        if (!a.readBy.includes(currentUser.id)) {
-          const updated = { ...a, readBy: [...a.readBy, currentUser.id] };
-          save('announcements', updated);
+      const annList = db.annonces || db.announcements || [];
+      annList.forEach(a => {
+        if (!(a.readBy || []).includes(currentUser.id)) {
+          const updated = { ...a, readBy: [...(a.readBy || []), currentUser.id] };
+          save('annonces', updated);
         }
       });
     }
-  }, [db.announcements, currentUser, save]);
+  }, [db.annonces, db.announcements, currentUser, save]);
 
   const handleAdd = () => {
     info('Action', 'Création d\'annonce non implémentée.');
@@ -69,24 +70,24 @@ const Announcements = () => {
               key={a.id} 
               className="page-card animate-up" 
               style={{ 
-                borderLeft: a.urgente ? '4px solid var(--danger)' : '4px solid var(--info)',
+                borderLeft: (a.urgente || a.urgent) ? '4px solid var(--danger)' : '4px solid var(--info)',
                 padding: '1.5rem',
                 marginBottom: 0
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                  <h3 style={{ margin: 0, fontWeight: 700, fontSize: '1.1rem', color: 'var(--blue-dark)' }}>{a.title}</h3>
-                  {a.urgente && <span className="badge badge-red">URGENT</span>}
+                  <h3 style={{ margin: 0, fontWeight: 700, fontSize: '1.1rem', color: 'var(--blue-dark)' }}>{a.titre || a.title}</h3>
+                  {(a.urgente || a.urgent) && <span className="badge badge-red">URGENT</span>}
                 </div>
-                <span style={{ fontSize: '.85rem', color: 'var(--text-3)', fontWeight: 600 }}>{new Date(a.createdAt).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                <span style={{ fontSize: '.85rem', color: 'var(--text-3)', fontWeight: 600 }}>{new Date(a.dateCreation || a.createdAt).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
               </div>
               <p style={{ whiteSpace: 'pre-line', fontSize: '.95rem', lineHeight: '1.65', color: 'var(--text-2)', marginTop: '1.25rem' }}>
-                {a.body}
+                {a.contenu || a.body}
               </p>
               <div style={{ display: 'flex', gap: '1.5rem', borderTop: '1px solid var(--border)', paddingTop: '1rem', marginTop: '1.2rem', fontSize: '.8rem', color: 'var(--text-3)' }}>
-                <span><strong style={{color: 'var(--text-2)'}}>Auteur:</strong> {teacherName(a.authorId) || 'Admin'}</span>
-                <span><strong style={{color: 'var(--text-2)'}}>Cible:</strong> {a.target === 'all' ? 'Tout le département' : `Filière ${a.target}`}</span>
+                <span><strong style={{color: 'var(--text-2)'}}>Auteur:</strong> {teacherName(a.idAdministrateur || a.authorId) || 'Admin'}</span>
+                <span><strong style={{color: 'var(--text-2)'}}>Cible:</strong> {(a.cible || a.target) === 'all' || (a.cible || a.target) === 'Tous' ? 'Tout le département' : `Filière ${a.cible || a.target}`}</span>
               </div>
             </div>
           ))

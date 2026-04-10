@@ -14,7 +14,7 @@ const AdminReclamations = () => {
   const [formData, setFormData] = useState({ reponse: '', newNote: '' });
 
   const filteredRecs = useMemo(() => {
-    return db.reclamations.filter(r => statutFilter ? r.statut === statutFilter : true);
+    return (db.reclamations || []).filter(r => statutFilter ? r.statut === statutFilter : true);
   }, [db.reclamations, statutFilter]);
 
   const handleOpenDetail = (rec) => {
@@ -29,9 +29,18 @@ const AdminReclamations = () => {
     
     // If validated and new note provided, update grade
     if (newStatut === 'VALIDEE' && formData.newNote) {
-      const grade = db.grades.find(g => g.studentId === selectedRec.studentId && g.moduleId === selectedRec.moduleId);
+      const sId = selectedRec.idEtudiant || selectedRec.studentId;
+      const mId = selectedRec.idModule || selectedRec.moduleId;
+      const grade = (db.notes || db.grades || []).find(g => (g.idEtudiant === sId || g.studentId === sId) && (g.idModule === mId || g.moduleId === mId));
       if (grade) {
-        save('grades', { ...grade, final: parseFloat(formData.newNote), edited: true });
+        save('notes', { 
+            ...grade, 
+            idEtudiant: sId,
+            idModule: mId,
+            moyenne: parseFloat(formData.newNote),
+            final: parseFloat(formData.newNote), 
+            edited: true 
+        });
       }
     }
     
@@ -87,10 +96,10 @@ const AdminReclamations = () => {
               {filteredRecs.map(r => (
                 <tr key={r.id} className="hover-row" onClick={() => handleOpenDetail(r)} style={{ cursor: 'pointer' }}>
                   <td style={{ padding: '15px 20px' }}>
-                    <div style={{ fontWeight: '700', color: 'var(--blue-dark)' }}>{studentName(r.studentId)}</div>
+                    <div style={{ fontWeight: '700', color: 'var(--blue-dark)' }}>{studentName(r.idEtudiant || r.studentId)}</div>
                   </td>
                   <td>
-                    <div style={{ fontSize: '0.9rem', fontWeight: '600', color: 'var(--text-2)' }}>{moduleName(r.moduleId)}</div>
+                    <div style={{ fontSize: '0.9rem', fontWeight: '600', color: 'var(--text-2)' }}>{moduleName(r.idModule || r.moduleId)}</div>
                   </td>
                   <td>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: '6px' }}>

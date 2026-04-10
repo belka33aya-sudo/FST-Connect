@@ -11,7 +11,7 @@ const AdminAnnonces = () => {
   const [editingAnnouncement, setEditingAnnouncement] = useState(null);
   
   const [formData, setFormData] = useState({
-    title: '', content: '', target: 'ALL', urgent: false, date: new Date().toISOString()
+    titre: '', title: '', contenu: '', content: '', cible: 'ALL', target: 'ALL', urgente: false, urgent: false, datePublication: new Date().toISOString(), date: new Date().toISOString()
   });
 
   const handleOpenAdd = () => {
@@ -22,7 +22,14 @@ const AdminAnnonces = () => {
 
   const handleEdit = (a) => {
     setEditingAnnouncement(a);
-    setFormData({ ...a });
+    setFormData({ 
+      ...a,
+      titre: a.titre || a.title || '',
+      contenu: a.contenu || a.content || '',
+      cible: a.cible || a.target || 'ALL',
+      urgente: a.urgente !== undefined ? a.urgente : a.urgent,
+      datePublication: a.datePublication || a.date || new Date().toISOString()
+    });
     setShowPanel(true);
   };
 
@@ -37,9 +44,20 @@ const AdminAnnonces = () => {
     e.preventDefault();
     const data = {
       ...formData,
-      id: editingAnnouncement ? editingAnnouncement.id : nextId('announcements')
+      id: editingAnnouncement ? editingAnnouncement.id : nextId('annonces'),
+      titre: formData.titre || formData.title,
+      contenu: formData.contenu || formData.content,
+      cible: formData.cible || formData.target,
+      urgente: formData.urgente !== undefined ? formData.urgente : formData.urgent,
+      datePublication: formData.datePublication || formData.date,
+      // Legacy keep
+      title: formData.titre || formData.title,
+      content: formData.contenu || formData.content,
+      target: formData.cible || formData.target,
+      urgent: formData.urgente !== undefined ? formData.urgente : formData.urgent,
+      date: formData.datePublication || formData.date
     };
-    save('announcements', data);
+    save('annonces', data);
     setShowPanel(false);
     success(editingAnnouncement ? 'Mise à jour' : 'Publiée', 'L\'annonce est visible sur les tableaux de bord.');
   };
@@ -69,40 +87,45 @@ const AdminAnnonces = () => {
               </tr>
             </thead>
             <tbody>
-              {db.announcements.map(a => (
-                <tr key={a.id}>
-                  <td style={{ padding: '15px 20px' }}>
-                    <div style={{ fontWeight: '700', color: 'var(--blue-dark)', fontSize: '0.95rem' }}>{a.title}</div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-3)', maxWidth: '400px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.content}</div>
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                       {a.target === 'ALL' ? <Globe size={14} color="var(--blue-mid)" /> : <Lock size={14} color="var(--orange)" />}
-                       <span style={{ fontSize: '0.85rem', fontWeight: '600' }}>{a.target === 'ALL' ? 'Tout le dépt' : a.target}</span>
-                    </div>
-                  </td>
-                  <td>
-                    {a.urgent ? (
-                      <span className="badge badge-red" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                        <Bell size={10} /> URGENT
-                      </span>
-                    ) : (
-                      <span className="badge badge-gray">Normal</span>
-                    )}
-                  </td>
-                  <td>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                       <Calendar size={12} /> {new Date(a.date).toLocaleDateString()}
-                    </div>
-                  </td>
-                  <td style={{ textAlign: 'right', padding: '15px 20px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
-                      <button className="btn btn-ghost btn-sm" onClick={() => handleEdit(a)}><Edit size={16} /></button>
-                      <button className="btn btn-ghost btn-sm" onClick={() => handleDelete(a.id)}><Trash2 size={16} color="var(--danger)" /></button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {(db.annonces || db.announcements || []).map(a => {
+                const isUrgent = a.urgente !== undefined ? a.urgente : a.urgent;
+                const aTarget = a.cible || a.target;
+                const aDate = a.datePublication || a.date;
+                return (
+                  <tr key={a.id}>
+                    <td style={{ padding: '15px 20px' }}>
+                      <div style={{ fontWeight: '700', color: 'var(--blue-dark)', fontSize: '0.95rem' }}>{a.titre || a.title}</div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-3)', maxWidth: '400px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.contenu || a.content}</div>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                         {aTarget === 'ALL' ? <Globe size={14} color="var(--blue-mid)" /> : <Lock size={14} color="var(--orange)" />}
+                         <span style={{ fontSize: '0.85rem', fontWeight: '600' }}>{aTarget === 'ALL' ? 'Tout le dépt' : aTarget}</span>
+                      </div>
+                    </td>
+                    <td>
+                      {isUrgent ? (
+                        <span className="badge badge-red" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <Bell size={10} /> URGENT
+                        </span>
+                      ) : (
+                        <span className="badge badge-gray">Normal</span>
+                      )}
+                    </td>
+                    <td>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                         <Calendar size={12} /> {new Date(aDate).toLocaleDateString()}
+                      </div>
+                    </td>
+                    <td style={{ textAlign: 'right', padding: '15px 20px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
+                        <button className="btn btn-ghost btn-sm" onClick={() => handleEdit(a)}><Edit size={16} /></button>
+                        <button className="btn btn-ghost btn-sm" onClick={() => handleDelete(a.id)}><Trash2 size={16} color="var(--danger)" /></button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

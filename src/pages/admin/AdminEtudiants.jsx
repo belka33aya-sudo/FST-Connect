@@ -18,21 +18,41 @@ const AdminEtudiants = () => {
   const [selectedYear, setSelectedYear] = useState(null);
 
   // Form State
+  const students = useMemo(() => db.etudiants || [], [db.etudiants]);
+  const filieres = useMemo(() => db.filieres || [], [db.filieres]);
+  const groups = useMemo(() => db.groupes || [], [db.groupes]);
+  const users = useMemo(() => db.utilisateurs || [], [db.utilisateurs]);
+
+  const studentsWithNames = useMemo(() => {
+    return students.map(s => {
+      const u = users.find(user => user.id === s.utilisateurId);
+      return { 
+        ...s, 
+        name: u ? `${u.prenom} ${u.nom}` : (s.name || '—'),
+        email: u?.email || s.email || '—'
+      };
+    });
+  }, [students, users]);
+
   const [formData, setFormData] = useState({
-    cne: '', nom: '', prenom: '', email: '', idFiliere: '', idGroupeTD: '', idGroupeTP: '', statut: 'ACTIF'
+    cne: '', nom: '', prenom: '', email: '', idFiliere: '', idGroupeTD: '', idGroupeTP: '', anneeInscription: 1, statut: 'ACTIF'
   });
+  // Legacy support for older DB
+  if (formData.CNE) formData.cne = formData.CNE;
+  if (formData.filiereId) formData.idFiliere = formData.filiereId;
+  if (formData.groupTDId) formData.idGroupeTD = formData.groupTDId;
+  if (formData.groupTPId) formData.idGroupeTP = formData.groupTPId;
 
   const filteredStudents = useMemo(() => {
-    return db.etudiants.filter(s => {
-      const user = db.utilisateurs.find(u => u.id === s.utilisateurId) || s;
-      const fullName = `${user.prenom || ''} ${user.nom || ''}`.toLowerCase();
+    return studentsWithNames.filter(s => {
+      const fullName = (s.name || '').toLowerCase();
       const matchesSearch = fullName.includes(search.toLowerCase()) || 
                            (s.cne && s.cne.toLowerCase().includes(search.toLowerCase()));
       const matchesFiliere = selectedFiliereId ? s.idFiliere === selectedFiliereId : true;
       const matchesYear = selectedYear ? (s.anneeInscription === selectedYear) : true;
       return matchesSearch && matchesFiliere && matchesYear;
     });
-  }, [db.etudiants, db.utilisateurs, search, selectedFiliereId, selectedYear]);
+  }, [studentsWithNames, search, selectedFiliereId, selectedYear]);
 
   const filiereClasses = useMemo(() => {
     if (selectedFiliereId) {
@@ -40,16 +60,16 @@ const AdminEtudiants = () => {
       if (!filiere) return [];
       const years = [];
       for (let i = 1; i <= (filiere.duree || 3); i++) {
-        const count = db.etudiants.filter(s => s.idFiliere === selectedFiliereId && s.anneeInscription === i).length;
+        const count = students.filter(s => s.idFiliere === selectedFiliereId && s.anneeInscription === i).length;
         years.push({ year: i, count });
       }
       return years;
     }
     return db.filieres.map(f => ({
       ...f,
-      count: db.etudiants.filter(s => s.idFiliere === f.id).length
+      count: students.filter(s => s.idFiliere === f.id).length
     }));
-  }, [db.filieres, db.etudiants, selectedFiliereId]);
+  }, [db.filieres, students, selectedFiliereId]);
 
   const handleOpenAdd = () => {
     setEditingStudent(null);
@@ -75,7 +95,6 @@ const AdminEtudiants = () => {
   };
 
   const handleDelete = (id) => {
-    // Check constraints
     const hasAbsences = db.absences.some(a => a.idEtudiant === id);
     const hasGrades = db.notes.some(g => g.idEtudiant === id);
     if (hasAbsences || hasGrades) {
@@ -110,7 +129,6 @@ const AdminEtudiants = () => {
 
     const studentData = {
       id: studentId,
-      idEtudiant: studentId,
       utilisateurId: userId,
       cne: formData.cne,
       idFiliere: parseInt(formData.idFiliere),
@@ -149,7 +167,6 @@ const AdminEtudiants = () => {
         </div>
       </div>
 
-      {/* Breadcrumbs / View Title */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '24px', color: 'var(--text-2)', fontSize: '0.9rem', fontWeight: '600' }}>
         <span 
           style={{ cursor: 'pointer', opacity: selectedFiliereId ? 0.6 : 1 }} 
@@ -177,7 +194,6 @@ const AdminEtudiants = () => {
       </div>
 
       {!selectedYear ? (
-        /* GRID VIEW: FILIERES OR YEARS */
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '24px' }}>
            {filiereClasses.map((item, i) => (
              <div 
@@ -222,7 +238,6 @@ const AdminEtudiants = () => {
              </div>
            ))}
 
-           {/* Add New Class / Filiere placeholder if needed */}
            {!selectedFiliereId && (
              <div 
                className="page-card animate-up" 
@@ -234,7 +249,6 @@ const AdminEtudiants = () => {
            )}
         </div>
       ) : (
-        /* LIST VIEW: STUDENTS IN CLASS */
         <>
           <div className="page-card animate-up" style={{ padding: '16px', marginBottom: '24px', display: 'flex', gap: '16px' }}>
             <div style={{ position: 'relative', flex: 1 }}>
@@ -245,7 +259,7 @@ const AdminEtudiants = () => {
                 className="form-control"
                 style={{ paddingLeft: '40px', width: '100%' }}
                 value={search}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => setSearch(e.target.value)}
               />
             </div>
             <button className="btn btn-ghost" onClick={() => setSelectedYear(null)}>
@@ -273,7 +287,7 @@ const AdminEtudiants = () => {
                   <tr key={student.id}>
                     <td style={{ padding: '15px 20px' }}>
                        <div style={{ fontWeight: '800', fontVariantNumeric: 'tabular-nums', color: 'var(--blue-mid)' }}>
-                         {student.CNE || student.cne}
+                         {student.cne || student.CNE}
                        </div>
                     </td>
                     <td>
@@ -288,13 +302,13 @@ const AdminEtudiants = () => {
                       </div>
                     </td>
                     <td>
-                      <div style={{ fontSize: '0.9rem', fontWeight: '600', color: 'var(--text-2)' }}>{filiereName(student.filiereId)}</div>
+                      <div style={{ fontSize: '0.9rem', fontWeight: '600', color: 'var(--text-2)' }}>{filiereName(student.idFiliere || student.filiereId)}</div>
                       <div style={{ fontSize: '0.7rem', color: 'var(--text-3)' }}>Inscrit en A{student.anneeInscription || '25'}</div>
                     </td>
                     <td>
                        <div style={{ display: 'flex', gap: '4px' }}>
-                         <span className="badge badge-gray">{groupName(student.groupTDId)}</span>
-                         {student.groupTPId && <span className="badge badge-orange">{groupName(student.groupTPId)}</span>}
+                         <span className="badge badge-gray">{groupName(student.idGroupeTD || student.groupTDId)}</span>
+                         {(student.idGroupeTP || student.groupTPId) && <span className="badge badge-orange">{groupName(student.idGroupeTP || student.groupTPId)}</span>}
                        </div>
                     </td>
                     <td>{statusBadge(student.statut)}</td>
@@ -331,30 +345,36 @@ const AdminEtudiants = () => {
              <form id="studentForm" onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 <div className="form-group">
                   <label className="form-label">CNE (Identifiant National) *</label>
-                  <input type="text" className="form-control" value={formData.CNE} onChange={e => setFormData({...formData, CNE: e.target.value})} required placeholder="Ex: G1345678" />
+                  <input type="text" className="form-control" value={formData.cne || formData.CNE || ''} onChange={e => setFormData({...formData, cne: e.target.value, CNE: e.target.value})} required placeholder="Ex: G1345678" />
                 </div>
                 
-                <div className="form-group">
-                  <label className="form-label">Nom & Prénom *</label>
-                  <input type="text" className="form-control" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div className="form-group">
+                    <label className="form-label">Nom *</label>
+                    <input type="text" className="form-control" value={formData.nom || ''} onChange={e => setFormData({...formData, nom: e.target.value})} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Prénom *</label>
+                    <input type="text" className="form-control" value={formData.prenom || ''} onChange={e => setFormData({...formData, prenom: e.target.value})} required />
+                  </div>
                 </div>
 
                 <div className="form-group">
                   <label className="form-label">Email Étudiant (@etu.uae.ac.ma)</label>
-                  <input type="email" className="form-control" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+                  <input type="email" className="form-control" value={formData.email || ''} onChange={e => setFormData({...formData, email: e.target.value})} />
                 </div>
 
                 <div className="form-group">
                   <label className="form-label">Filière d'inscription *</label>
-                  <select className="form-control" value={formData.filiereId} onChange={e => setFormData({...formData, filiereId: e.target.value})} required>
+                  <select className="form-control" value={formData.idFiliere || formData.filiereId || ''} onChange={e => setFormData({...formData, idFiliere: e.target.value, filiereId: e.target.value})} required>
                     <option value="">Choisir...</option>
-                    {db.filieres.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                    {db.filieres.map(f => <option key={f.id} value={f.id}>{f.nom || f.name}</option>)}
                   </select>
                 </div>
 
                 <div className="form-group">
                   <label className="form-label">Année d'étude *</label>
-                  <select className="form-control" value={formData.anneeInscription} onChange={e => setFormData({...formData, anneeInscription: e.target.value})} required>
+                  <select className="form-control" value={formData.anneeInscription || 1} onChange={e => setFormData({...formData, anneeInscription: e.target.value})} required>
                     <option value="1">1ère Année</option>
                     <option value="2">2ème Année</option>
                     <option value="3">3ème Année</option>
@@ -362,25 +382,25 @@ const AdminEtudiants = () => {
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                   <div className="form-group">
-                     <label className="form-label">Groupe TD</label>
-                     <select className="form-control" value={formData.groupTDId} onChange={e => setFormData({...formData, groupTDId: e.target.value})}>
-                        <option value="">Aucun</option>
-                        {db.groups.filter(g => g.type === 'TD' && (formData.filiereId ? g.filiereId === parseInt(formData.filiereId) : true)).map(g => (
-                          <option key={g.id} value={g.id}>{g.name}</option>
-                        ))}
-                     </select>
-                   </div>
-                   <div className="form-group">
-                     <label className="form-label">Groupe TP</label>
-                     <select className="form-control" value={formData.groupTPId} onChange={e => setFormData({...formData, groupTPId: e.target.value})}>
-                        <option value="">Aucun</option>
-                        {db.groups.filter(g => g.type === 'TP' && (formData.filiereId ? g.filiereId === parseInt(formData.filiereId) : true)).map(g => (
-                          <option key={g.id} value={g.id}>{g.name}</option>
-                        ))}
-                     </select>
-                   </div>
-                </div>
+                    <div className="form-group">
+                      <label className="form-label">Groupe TD</label>
+                      <select className="form-control" value={formData.idGroupeTD || formData.groupTDId || ''} onChange={e => setFormData({...formData, idGroupeTD: e.target.value, groupTDId: e.target.value})}>
+                         <option value="">Aucun</option>
+                         {(db.groupesTD || db.groups || []).map(g => (
+                           <option key={g.id} value={g.id}>{g.nom || g.name}</option>
+                         ))}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Groupe TP</label>
+                      <select className="form-control" value={formData.idGroupeTP || formData.groupTPId || ''} onChange={e => setFormData({...formData, idGroupeTP: e.target.value, groupTPId: e.target.value})}>
+                         <option value="">Aucun</option>
+                         {(db.groupesTP || db.groups || []).map(g => (
+                           <option key={g.id} value={g.id}>{g.nom || g.name}</option>
+                         ))}
+                      </select>
+                    </div>
+                 </div>
 
                 <div className="form-group">
                   <label className="form-label">Statut Administratif</label>

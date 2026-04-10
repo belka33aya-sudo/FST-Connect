@@ -187,7 +187,7 @@ const AdminModules = () => {
                     <label className="form-label">Filière *</label>
                     <select className="form-control" value={formData.idFiliere} onChange={(e) => setFormData({...formData, idFiliere: e.target.value})} required>
                       <option value="">Choisir...</option>
-                      {db.filieres.map(f => <option key={f.id} value={f.id}>{f.code} - {f.intitule}</option>)}
+                      {db.filieres.map(f => <option key={f.id} value={f.id}>{f.code} - {f.nom || f.name || f.intitule}</option>)}
                     </select>
                  </div>
                  <div className="form-group">
@@ -202,9 +202,10 @@ const AdminModules = () => {
                  <label className="form-label">Enseignant Coordonnateur</label>
                  <select className="form-control" value={formData.idEnseignant} onChange={(e) => setFormData({...formData, idEnseignant: e.target.value})}>
                     <option value="">Non assigné</option>
-                    {db.enseignants.map(t => {
-                        const user = db.utilisateurs.find(u => u.id === t.utilisateurId) || t;
-                        return <option key={t.id} value={t.id}>{user.prenom} {user.nom}</option>
+                    {(db.enseignants || db.teachers || []).map(t => {
+                        const user = db.utilisateurs?.find(u => u.id === t.utilisateurId) || t;
+                        const name = user.prenom ? `${user.prenom} ${user.nom}` : (user.name || user.nom);
+                        return <option key={t.id} value={t.id}>{name}</option>
                     })}
                  </select>
                </div>

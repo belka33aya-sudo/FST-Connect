@@ -13,10 +13,10 @@ const AdminSalles = () => {
   const [editingRoom, setEditingRoom] = useState(null);
 
   const [formData, setFormData] = useState({
-    name: '',
-    type: 'Cours',
-    capacity: 40,
-    equipment: '', 
+    nom: '', name: '',
+    typeSalle: 'Cours', type: 'Cours',
+    capacite: 40, capacity: 40,
+    equipements: '', equipment: '', 
     statut: 'Disponible'
   });
 
@@ -27,20 +27,21 @@ const AdminSalles = () => {
   });
 
   const handleDelete = (id) => {
-    const hasSessions = db.sessions.some(s => s.roomId === id);
+    const sessionsList = db.seances || db.sessions || [];
+    const hasSessions = sessionsList.some(s => (s.idSalle || s.roomId) === id);
     if (hasSessions) {
       error('Erreur', 'Impossible de supprimer une salle assignée à des séances.');
       return;
     }
     if (window.confirm('Voulez-vous vraiment supprimer cette salle ?')) {
-      remove('rooms', id);
+      remove('salles', id);
       success('Supprimée', 'Salle supprimée avec succès.');
     }
   };
 
   const toggleStatus = (room) => {
     const newStatus = (room.statut || 'Disponible') === 'Disponible' ? 'Hors service' : 'Disponible';
-    save('rooms', { ...room, statut: newStatus });
+    save('salles', { ...room, statut: newStatus });
     success('Mise à jour', `Le statut de la salle est passé à ${newStatus}.`);
   };
 
@@ -67,23 +68,31 @@ const AdminSalles = () => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!formData.name) {
+    const finalNom = formData.nom || formData.name;
+    if (!finalNom) {
       error('Erreur', 'Veuillez saisir un nom pour la salle.');
       return;
     }
 
-    const equipmentArray = formData.equipment.split(',').map(item => item.trim()).filter(item => item.length > 0);
+    const equipmentStr = formData.equipements || formData.equipment || '';
+    const equipmentArray = equipmentStr.split(',').map(item => item.trim()).filter(item => item.length > 0);
     const roomToSave = {
       ...formData,
-      equipment: equipmentArray,
-      capacity: parseInt(formData.capacity) || 0
+      nom: finalNom,
+      name: finalNom,
+      typeSalle: formData.typeSalle || formData.type,
+      type: formData.typeSalle || formData.type,
+      capacite: parseInt(formData.capacite || formData.capacity) || 0,
+      capacity: parseInt(formData.capacite || formData.capacity) || 0,
+      equipements: equipmentArray,
+      equipment: equipmentArray
     };
 
     if (editingRoom) {
-      save('rooms', { ...editingRoom, ...roomToSave });
+      save('salles', { ...editingRoom, ...roomToSave });
       success('Modifiée', 'Salle mise à jour avec succès.');
     } else {
-      save('rooms', { id: nextId('rooms'), ...roomToSave });
+      save('salles', { id: nextId('salles'), ...roomToSave });
       success('Ajoutée', 'Nouvelle salle ajoutée.');
     }
     closePanel();
@@ -143,8 +152,11 @@ const AdminSalles = () => {
               </tr>
             </thead>
             <tbody>
-              {filteredRooms.map(room => {
+              {(db.salles || db.rooms || []).map(room => {
                 const status = room.statut || 'Disponible';
+                const rType = room.typeSalle || room.type;
+                const rCap = room.capacite || room.capacity;
+                const rEquip = room.equipements || room.equipment;
                 return (
                   <tr key={room.id} style={{ opacity: status === 'Hors service' ? 0.7 : 1 }}>
                     <td style={{ padding: '15px 20px' }}>
@@ -152,20 +164,20 @@ const AdminSalles = () => {
                         <div style={{ width: '40px', height: '40px', background: 'var(--bg)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyCenter: 'center', color: 'var(--blue-mid)' }}>
                           <MapPin size={20} style={{ margin: 'auto' }} />
                         </div>
-                        <div style={{ fontWeight: '700', color: 'var(--blue-dark)' }}>{room.name}</div>
+                        <div style={{ fontWeight: '700', color: 'var(--blue-dark)' }}>{room.nom || room.name}</div>
                       </div>
                     </td>
                     <td>
-                       <span className={`badge ${room.type === 'TP' ? 'badge-orange' : room.type === 'Amphi' ? 'badge-blue' : 'badge-gray'}`}>{room.type}</span>
+                       <span className={`badge ${rType === 'TP' ? 'badge-orange' : rType === 'Amphi' ? 'badge-blue' : 'badge-gray'}`}>{rType}</span>
                     </td>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-2)', fontWeight: '600' }}>
-                        <Users size={14} /> {room.capacity} places
+                        <Users size={14} /> {rCap} places
                       </div>
                     </td>
                     <td>
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-3)', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                        {Array.isArray(room.equipment) ? room.equipment.map((eq, i) => (
+                        {Array.isArray(rEquip) ? rEquip.map((eq, i) => (
                            <span key={i} style={{ background: 'var(--bg)', padding: '2px 8px', borderRadius: '4px' }}>{eq}</span>
                         )) : <span style={{ fontStyle: 'italic' }}>Aucun</span>}
                       </div>

@@ -18,8 +18,9 @@ const TeacherModules = () => {
     file: null
   });
 
-  const teacherId = currentUser?.linkedId;
-  const myModules = useMemo(() => db.modules.filter(m => m.teacherId === teacherId), [db.modules, teacherId]);
+  const teacher = useMemo(() => db.enseignants.find(t => t.utilisateurId === currentUser.id), [db.enseignants, currentUser.id]);
+  const teacherId = teacher?.id;
+  const myModules = useMemo(() => db.modules.filter(m => (m.idEnseignant === teacherId || m.teacherId === teacherId)), [db.modules, teacherId]);
 
   // Select first module by default
   useState(() => {
@@ -27,7 +28,7 @@ const TeacherModules = () => {
   });
 
   const selectedModule = useMemo(() => db.modules.find(m => m.id === selectedModuleId), [selectedModuleId, db.modules]);
-  const moduleDocs = useMemo(() => db.documents.filter(d => d.moduleId === selectedModuleId), [db.documents, selectedModuleId]);
+  const moduleDocs = useMemo(() => db.documents.filter(d => (d.idModule === selectedModuleId || d.moduleId === selectedModuleId)), [db.documents, selectedModuleId]);
 
   const filteredDocs = useMemo(() => {
     return moduleDocs.filter(d => d.type === activeTab);
@@ -37,15 +38,23 @@ const TeacherModules = () => {
     e.preventDefault();
     const doc = {
       id: Date.now(),
+      idModule: selectedModuleId,
       moduleId: selectedModuleId,
+      titre: newDoc.title,
       title: newDoc.title,
       type: newDoc.type,
+      fichier: newDoc.file ? newDoc.file.name : 'document.pdf',
       filename: newDoc.file ? newDoc.file.name : 'document.pdf',
+      datePublication: new Date().toISOString().split('T')[0],
       uploadedAt: new Date().toISOString().split('T')[0],
+      idEnseignant: teacherId,
       teacherId: teacherId,
+      nombreTelechargements: 0,
       downloadCount: 0,
       ...(newDoc.type === 'Devoir' && {
+        dateLimite: newDoc.deadline,
         deadline: newDoc.deadline,
+        description: newDoc.instructions,
         instructions: newDoc.instructions,
         submissionsCount: 0,
         totalStudents: 30
@@ -71,7 +80,7 @@ const TeacherModules = () => {
         </div>
         <div>
           {myModules.map(m => {
-            const count = db.documents.filter(d => d.moduleId === m.id).length;
+            const count = db.documents.filter(d => (d.idModule === m.id || d.moduleId === m.id)).length;
             const isSelected = selectedModuleId === m.id;
             return (
               <div
@@ -86,9 +95,9 @@ const TeacherModules = () => {
                   transition: 'all 0.2s'
                 }}
               >
-                <div style={{ fontWeight: isSelected ? 800 : 600, fontSize: '0.9rem', color: isSelected ? '#1e3a5f' : '#334155', marginBottom: '0.5rem' }}>{m.title}</div>
+                <div style={{ fontWeight: isSelected ? 800 : 600, fontSize: '0.9rem', color: isSelected ? '#1e3a5f' : '#334155', marginBottom: '0.5rem' }}>{m.intitule || m.title}</div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span className="badge badge-refined" style={{ background: '#e2e8f0', color: '#475569', fontSize: '0.65rem' }}>{filiereName(m.filiereId)}</span>
+                  <span className="badge badge-refined" style={{ background: '#e2e8f0', color: '#475569', fontSize: '0.65rem' }}>{filiereName(m.idFiliere || m.filiereId)}</span>
                   <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{count} doc(s)</span>
                 </div>
               </div>
@@ -104,8 +113,8 @@ const TeacherModules = () => {
             {/* Header */}
             <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#1e3a5f' }}>{selectedModule.title}</h2>
-                <p style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '2px' }}>Code: {selectedModule.code} · Semestre {selectedModule.semester}</p>
+                <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#1e3a5f' }}>{selectedModule.intitule || selectedModule.title}</h2>
+                <p style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '2px' }}>Code: {selectedModule.code} · Semestre {selectedModule.semestre || selectedModule.semester}</p>
               </div>
               <button className="btn btn-primary" onClick={() => setShowModal(true)}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginRight: '8px' }}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -165,11 +174,11 @@ const TeacherModules = () => {
                           )}
                         </div>
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#1e293b' }}>{doc.title}</div>
+                          <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#1e293b' }}>{doc.titre || doc.title}</div>
                           {doc.type === 'Ressource' ? (
-                            <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '2px' }}>{doc.filename}</div>
+                            <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '2px' }}>{doc.fichier || doc.filename}</div>
                           ) : (
-                            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px', fontStyle: 'italic' }}>{doc.instructions}</div>
+                            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px', fontStyle: 'italic' }}>{doc.description || doc.instructions}</div>
                           )}
                         </div>
                       </div>
@@ -179,18 +188,18 @@ const TeacherModules = () => {
                           <>
                             <div>
                               <div style={{ fontSize: '0.65rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700 }}>Ajouté le</div>
-                              <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#475569' }}>{doc.uploadedAt}</div>
+                              <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#475569' }}>{doc.datePublication || doc.uploadedAt}</div>
                             </div>
                             <div>
                               <div style={{ fontSize: '0.65rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700 }}>Téléchargements</div>
-                              <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#475569' }}>{doc.downloadCount}</div>
+                              <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#475569' }}>{doc.nombreTelechargements || doc.downloadCount}</div>
                             </div>
                           </>
                         ) : (
                           <>
                             <div>
                               <div style={{ fontSize: '0.65rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700 }}>Date limite</div>
-                              <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#b91c1c' }}>{doc.deadline}</div>
+                              <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#b91c1c' }}>{doc.dateLimite || doc.deadline}</div>
                             </div>
                             <div>
                               <div style={{ fontSize: '0.65rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700 }}>Soumissions</div>
