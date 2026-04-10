@@ -13,20 +13,20 @@ const AdminModules = () => {
   const [editingModule, setEditingModule] = useState(null);
 
   const [formData, setFormData] = useState({
-    code: '', title: '', filiereId: '', semester: 1, coeff: 3, teacherId: ''
+    code: '', intitule: '', idFiliere: '', semestre: 'S1', coefficient: 3, idEnseignant: ''
   });
 
   const filteredModules = useMemo(() => {
     return db.modules.filter(m => {
-      const matchesFiliere = filiereFilter ? m.filiereId === parseInt(filiereFilter) : true;
-      const matchesSemestre = semestreFilter ? m.semester === parseInt(semestreFilter) : true;
+      const matchesFiliere = filiereFilter ? m.idFiliere === parseInt(filiereFilter) : true;
+      const matchesSemestre = semestreFilter ? m.semestre === semestreFilter : true;
       return matchesFiliere && matchesSemestre;
     });
   }, [db.modules, filiereFilter, semestreFilter]);
 
   const handleOpenAdd = () => {
     setEditingModule(null);
-    setFormData({ code: '', title: '', filiereId: '', semester: 1, coeff: 3, teacherId: '' });
+    setFormData({ code: '', intitule: '', idFiliere: '', semestre: 'S1', coefficient: 3, idEnseignant: '' });
     setShowPanel(true);
   };
 
@@ -48,12 +48,26 @@ const AdminModules = () => {
     const data = { 
       ...formData, 
       id: editingModule ? editingModule.id : nextId('modules'),
-      filiereId: parseInt(formData.filiereId),
-      semester: parseInt(formData.semester),
-      coeff: parseFloat(formData.coeff),
-      teacherId: formData.teacherId ? parseInt(formData.teacherId) : null
+      idModule: editingModule ? editingModule.idModule : nextId('modules'),
+      idFiliere: parseInt(formData.idFiliere),
+      coefficient: parseFloat(formData.coefficient),
+      idEnseignant: formData.idEnseignant ? parseInt(formData.idEnseignant) : null
     };
     save('modules', data);
+    
+    // Also update affectation if teacher is set
+    if (data.idEnseignant) {
+        const aff = {
+            id: nextId('affectations'),
+            idAffectation: nextId('affectations'),
+            idEnseignant: data.idEnseignant,
+            idModule: data.id,
+            typeIntervention: 'Cours',
+            heuresAssignees: 30
+        };
+        save('affectations', aff);
+    }
+
     setShowPanel(false);
     success(editingModule ? 'Mis à jour' : 'Créé', 'Le catalogue des modules a été actualisé.');
   };
@@ -90,7 +104,7 @@ const AdminModules = () => {
           onChange={(e) => setSemestreFilter(e.target.value)}
         >
           <option value="">Tous semestres</option>
-          {[1,2,3,4,5,6].map(s => <option key={s} value={s}>Semestre {s}</option>)}
+          {['S1','S2','S3','S4','S5','S6'].map(s => <option key={s} value={s}>Semestre {s}</option>)}
         </select>
       </div>
 
@@ -116,18 +130,18 @@ const AdminModules = () => {
                         <BookOpen size={16} />
                       </div>
                       <div>
-                        <div style={{ fontWeight: '700', color: 'var(--blue-dark)', fontSize: '0.9rem' }}>{m.title}</div>
+                        <div style={{ fontWeight: '700', color: 'var(--blue-dark)', fontSize: '0.9rem' }}>{m.intitule}</div>
                         <div style={{ fontSize: '0.7rem', color: 'var(--text-3)', fontWeight: '700', fontFamily: 'monospace' }}>{m.code}</div>
                       </div>
                     </div>
                   </td>
-                  <td><span className="badge badge-gray">{filiereName(m.filiereId)}</span></td>
-                  <td><span style={{ fontWeight: '700', color: 'var(--text-2)' }}>S{m.semester}</span></td>
-                  <td><div style={{ fontWeight: '800', color: 'var(--blue-mid)' }}>{m.coeff}</div></td>
+                  <td><span className="badge badge-gray">{filiereName(m.idFiliere)}</span></td>
+                  <td><span style={{ fontWeight: '700', color: 'var(--text-2)' }}>{m.semestre}</span></td>
+                  <td><div style={{ fontWeight: '800', color: 'var(--blue-mid)' }}>{m.coefficient}</div></td>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <User size={12} color="var(--text-3)" />
-                      <span style={{ fontSize: '0.85rem', fontWeight: '500', color: 'var(--text-2)' }}>{teacherName(m.teacherId)}</span>
+                      <span style={{ fontSize: '0.85rem', fontWeight: '500', color: 'var(--text-2)' }}>{teacherName(m.idEnseignant)}</span>
                     </div>
                   </td>
                   <td style={{ textAlign: 'right', padding: '15px 20px' }}>
@@ -159,36 +173,39 @@ const AdminModules = () => {
                   </div>
                   <div className="form-group">
                     <label className="form-label">Coefficient</label>
-                    <input type="number" step="0.5" className="form-control" value={formData.coeff} onChange={(e) => setFormData({...formData, coeff: e.target.value})} required />
+                    <input type="number" step="0.5" className="form-control" value={formData.coefficient} onChange={(e) => setFormData({...formData, coefficient: e.target.value})} required />
                   </div>
                </div>
 
                <div className="form-group">
                  <label className="form-label">Intitulé du Module *</label>
-                 <input type="text" className="form-control" value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})} required />
+                 <input type="text" className="form-control" value={formData.intitule} onChange={(e) => setFormData({...formData, intitule: e.target.value})} required />
                </div>
 
                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                  <div className="form-group">
                     <label className="form-label">Filière *</label>
-                    <select className="form-control" value={formData.filiereId} onChange={(e) => setFormData({...formData, filiereId: e.target.value})} required>
+                    <select className="form-control" value={formData.idFiliere} onChange={(e) => setFormData({...formData, idFiliere: e.target.value})} required>
                       <option value="">Choisir...</option>
-                      {db.filieres.map(f => <option key={f.id} value={f.id}>{f.code} - {f.name}</option>)}
+                      {db.filieres.map(f => <option key={f.id} value={f.id}>{f.code} - {f.intitule}</option>)}
                     </select>
                  </div>
                  <div className="form-group">
                     <label className="form-label">Semestre</label>
-                    <select className="form-control" value={formData.semester} onChange={(e) => setFormData({...formData, semester: e.target.value})}>
-                      {[1,2,3,4,5,6].map(s => <option key={s} value={s}>Semestre {s}</option>)}
+                    <select className="form-control" value={formData.semestre} onChange={(e) => setFormData({...formData, semestre: e.target.value})}>
+                      {['S1','S2','S3','S4','S5','S6'].map(s => <option key={s} value={s}>Semestre {s}</option>)}
                     </select>
                  </div>
                </div>
 
                <div className="form-group">
                  <label className="form-label">Enseignant Coordonnateur</label>
-                 <select className="form-control" value={formData.teacherId} onChange={(e) => setFormData({...formData, teacherId: e.target.value})}>
+                 <select className="form-control" value={formData.idEnseignant} onChange={(e) => setFormData({...formData, idEnseignant: e.target.value})}>
                     <option value="">Non assigné</option>
-                    {db.teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    {db.enseignants.map(t => {
+                        const user = db.utilisateurs.find(u => u.id === t.utilisateurId) || t;
+                        return <option key={t.id} value={t.id}>{user.prenom} {user.nom}</option>
+                    })}
                  </select>
                </div>
             </form>

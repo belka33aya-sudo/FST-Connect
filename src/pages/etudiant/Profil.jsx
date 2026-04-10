@@ -4,15 +4,16 @@ import { useData } from '../../contexts/DataContext';
 
 const Profil = () => {
   const { currentUser } = useAuth();
-  const { getStudentByUserId, db, save } = useData();
+  const { db, save } = useData();
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
-  const student = getStudentByUserId(currentUser.id);
-  const filiere = student ? db.filieres.find(f => f.id === student.filiereId) : null;
-  const group = student ? db.groups.find(g => g.id === student.groupTDId) : null;
+  const student = db.etudiants.find(s => s.utilisateurId === currentUser.id);
+  const filiere = student ? db.filieres.find(f => f.id === student.idFiliere) : null;
+  const group = student ? db.groupes.find(g => g.id === student.idGroupeTD) : null;
+  const user = db.utilisateurs.find(u => u.id === currentUser.id);
 
-  const [phone, setPhone] = useState(student?.phone || '');
+  const [phone, setPhone] = useState(user?.telephone || '');
   const [password, setPassword] = useState('');
 
   const handleSave = (e) => {
@@ -20,17 +21,13 @@ const Profil = () => {
     setErrorMsg('');
     
     try {
-      // 1. Update student phone
-      if (student) {
-        save('students', { ...student, phone });
-      }
-
-      // 2. Update user password if provided
-      if (password.trim()) {
-        const user = db.users.find(u => u.id === currentUser.id);
-        if (user) {
-          save('users', { ...user, password });
+      // 1. Update user phone and password if provided
+      if (user) {
+        const updatedUser = { ...user, telephone: phone };
+        if (password.trim()) {
+          updatedUser.motDePasse = password;
         }
+        save('utilisateurs', updatedUser);
       }
 
       setSuccessMsg('Profil mis à jour avec succès.');
@@ -41,7 +38,7 @@ const Profil = () => {
     }
   };
 
-  if (!student) {
+  if (!student || !user) {
     return (
       <div className="empty-state">
         <p>Profil étudiant introuvable.</p>
@@ -87,23 +84,23 @@ const Profil = () => {
             <div className="profile-fields" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
               <div className="form-group">
                 <span className="profile-field-label">Nom complet</span>
-                <div className="profile-field-value">{student.name}</div>
+                <div className="profile-field-value">{user.prenom} {user.nom}</div>
               </div>
               <div className="form-group">
                 <span className="profile-field-label">CNE</span>
-                <div className="profile-field-value">{student.CNE}</div>
+                <div className="profile-field-value">{student.cne}</div>
               </div>
               <div className="form-group">
                 <span className="profile-field-label">Email Institutionnel</span>
-                <div className="profile-field-value">{currentUser.email}</div>
+                <div className="profile-field-value">{user.email}</div>
               </div>
               <div className="form-group">
                 <span className="profile-field-label">Filière</span>
-                <div className="profile-field-value">{filiere?.name || '—'}</div>
+                <div className="profile-field-value">{filiere?.intitule || '—'}</div>
               </div>
               <div className="form-group">
                 <span className="profile-field-label">Groupe d'appartenance</span>
-                <div className="profile-field-value">{group?.name || '—'}</div>
+                <div className="profile-field-value">{group?.idGroupe || '—'}</div>
               </div>
               <div className="form-group">
                 <span className="profile-field-label">Année d'inscription</span>

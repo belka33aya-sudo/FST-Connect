@@ -13,11 +13,13 @@ export const AuthProvider = ({ children }) => {
   const login = (email, password) => {
     return new Promise((resolve, reject) => {
       setTimeout(() => {
-        const user = db.users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
+        const user = db.utilisateurs.find(u => u.email.toLowerCase() === email.toLowerCase() && u.motDePasse === password);
         if (user) {
-          setCurrentUser(user);
-          localStorage.setItem('gdi_user', JSON.stringify(user));
-          resolve(user);
+          // Reconstruct name for backward compatibility if needed, or use new fields
+          const sessionUser = { ...user, name: `${user.prenom} ${user.nom}` };
+          setCurrentUser(sessionUser);
+          localStorage.setItem('gdi_user', JSON.stringify(sessionUser));
+          resolve(sessionUser);
         } else {
           reject(new Error('Email ou mot de passe incorrect.'));
         }

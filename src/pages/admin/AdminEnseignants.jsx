@@ -12,48 +12,79 @@ const AdminEnseignants = () => {
   const [editingTeacher, setEditingTeacher] = useState(null);
 
   const [formData, setFormData] = useState({
-    matricule: '', name: '', email: '', grade: 'MCA', specialty: ''
+    matricule: '', nom: '', prenom: '', email: '', grade: 'PES', specialite: '', type: 'Titulaire', volumeHoraireBase: 12
   });
 
   const filteredTeachers = useMemo(() => {
-    return db.teachers.filter(t => 
-      t.name.toLowerCase().includes(search.toLowerCase()) || 
-      (t.matricule && t.matricule.toLowerCase().includes(search.toLowerCase())) ||
-      t.specialty.toLowerCase().includes(search.toLowerCase())
-    );
-  }, [db.teachers, search]);
+    return db.enseignants.filter(t => {
+      const user = db.utilisateurs.find(u => u.id === t.utilisateurId) || t;
+      const fullName = `${user.prenom || ''} ${user.nom || ''}`.toLowerCase();
+      return fullName.includes(search.toLowerCase()) || 
+             (t.matricule && t.matricule.toLowerCase().includes(search.toLowerCase())) ||
+             (t.specialite && t.specialite.toLowerCase().includes(search.toLowerCase()));
+    });
+  }, [db.enseignants, db.utilisateurs, search]);
 
   const handleOpenAdd = () => {
     setEditingTeacher(null);
-    setFormData({ matricule: '', name: '', email: '', grade: 'MCA', specialty: '' });
+    setFormData({ matricule: '', nom: '', prenom: '', email: '', grade: 'PES', specialite: '', type: 'Titulaire', volumeHoraireBase: 12 });
     setShowPanel(true);
   };
 
   const handleEdit = (teacher) => {
+    const user = db.utilisateurs.find(u => u.id === teacher.utilisateurId) || {};
     setEditingTeacher(teacher);
-    setFormData({ ...teacher });
+    setFormData({ 
+      ...teacher, 
+      nom: user.nom || teacher.nom || '', 
+      prenom: user.prenom || teacher.prenom || '',
+      email: user.email || teacher.email || ''
+    });
     setShowPanel(true);
   };
 
   const handleDelete = (id) => {
-    const hasModules = db.modules.some(m => m.teacherId === id);
+    const hasModules = db.modules.some(m => m.idEnseignant === id);
     if (hasModules) {
       error('Erreur', 'Impossible de supprimer un enseignant affecté à des modules.');
       return;
     }
     if (window.confirm('Voulez-vous vraiment supprimer cet enseignant ?')) {
-      remove('teachers', id);
+      remove('enseignants', id);
       success('Supprimé', 'Enseignant retiré de la base.');
     }
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    const teacherData = {
-      ...formData,
-      id: editingTeacher ? editingTeacher.id : nextId('teachers')
+    
+    const userId = editingTeacher?.utilisateurId || nextId('utilisateurs');
+    const teacherId = editingTeacher ? editingTeacher.id : nextId('enseignants');
+
+    const userData = {
+      id: userId,
+      nom: formData.nom,
+      prenom: formData.prenom,
+      email: formData.email,
+      role: 'teacher',
+      statut: 'ACTIF'
     };
-    save('teachers', teacherData);
+
+    const teacherData = {
+      id: teacherId,
+      idEnseignant: teacherId,
+      utilisateurId: userId,
+      matricule: formData.matricule,
+      grade: formData.grade,
+      type: formData.type,
+      specialite: formData.specialite,
+      volumeHoraireBase: parseInt(formData.volumeHoraireBase || 12),
+      statut: 'ACTIF'
+    };
+
+    save('utilisateurs', userData);
+    save('enseignants', teacherData);
+
     success(editingTeacher ? 'Mis à jour' : 'Ajouté', 'Les informations de l\'enseignant ont été enregistrées.');
     setShowPanel(false);
   };
@@ -98,7 +129,9 @@ const AdminEnseignants = () => {
             </thead>
             <tbody>
               {filteredTeachers.map(teacher => {
-                const initials = teacher.name.replace(/(Prof\.|Dr\.|M\.)\s+/g, '').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+                const user = db.utilisateurs.find(u => u.id === teacher.utilisateurId) || teacher;
+                const fullName = `${user.prenom || ''} ${user.nom || ''}`;
+                const initials = fullName.replace(/(Prof\.|Dr\.|M\.)\s+/g, '').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
                 
                 return (
                   <tr key={teacher.id}>
@@ -108,9 +141,9 @@ const AdminEnseignants = () => {
                           {initials}
                         </div>
                         <div>
-                          <div style={{ fontWeight: '700', color: 'var(--blue-dark)' }}>{teacher.name}</div>
+                          <div style={{ fontWeight: '700', color: 'var(--blue-dark)' }}>{fullName}</div>
                           <div style={{ fontSize: '0.75rem', color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <Mail size={10} /> {teacher.email}
+                            <Mail size={10} /> {user.email}
                           </div>
                         </div>
                       </div>
@@ -121,7 +154,7 @@ const AdminEnseignants = () => {
                     <td>
                        <span className="badge badge-blue" style={{ fontSize: '0.7rem' }}>{teacher.grade}</span>
                     </td>
-                    <td><div style={{ fontWeight: '600', color: 'var(--text-2)', fontSize: '0.85rem' }}>{teacher.specialty}</div></td>
+                    <td><div style={{ fontWeight: '600', color: 'var(--text-2)', fontSize: '0.85rem' }}>{teacher.specialite}</div></td>
                     <td style={{ textAlign: 'right', padding: '15px 20px' }}>
                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                           <button className="btn btn-ghost btn-sm" title="Modifier" onClick={() => handleEdit(teacher)}>
@@ -153,9 +186,15 @@ const AdminEnseignants = () => {
           
           <div className="side-panel-body">
             <form id="teacherForm" onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              <div className="form-group">
-                <label className="form-label">Nom Complet & Titre</label>
-                <input type="text" className="form-control" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required placeholder="Ex: Prof. Ahmed Alami" />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div className="form-group">
+                  <label className="form-label">Prénom</label>
+                  <input type="text" className="form-control" value={formData.prenom} onChange={e => setFormData({...formData, prenom: e.target.value})} required placeholder="Ahmed" />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Nom</label>
+                  <input type="text" className="form-control" value={formData.nom} onChange={e => setFormData({...formData, nom: e.target.value})} required placeholder="Alami" />
+                </div>
               </div>
 
               <div className="form-group">
@@ -180,7 +219,7 @@ const AdminEnseignants = () => {
 
               <div className="form-group">
                 <label className="form-label">Spécialité / Domaine</label>
-                <input type="text" className="form-control" value={formData.specialty} onChange={e => setFormData({...formData, specialty: e.target.value})} placeholder="IA, Réseaux, BD..." />
+                <input type="text" className="form-control" value={formData.specialite} onChange={e => setFormData({...formData, specialite: e.target.value})} placeholder="IA, Réseaux, BD..." />
               </div>
             </form>
           </div>

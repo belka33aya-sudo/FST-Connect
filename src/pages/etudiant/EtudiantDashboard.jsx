@@ -9,58 +9,60 @@ const DAYS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
 /* ── MODULE 9: Dashboard Étudiant (Simplified) ── */
 const EtudiantDashboard = () => {
   const { currentUser } = useAuth();
-  const { db, getStudentByUserId, gradeAvg, moduleName, roomName } = useData();
+  const { db, moduleName, roomName } = useData();
   const navigate = useNavigate();
 
-  const student = getStudentByUserId(currentUser.id);
-  if (!student) return <div className="empty-state"><p>Profil étudiant introuvable.</p></div>;
+  const student = db.etudiants.find(s => s.utilisateurId === currentUser.id);
+  const user = db.utilisateurs.find(u => u.id === currentUser.id);
+
+  if (!student || !user) return <div className="empty-state"><p>Profil étudiant introuvable.</p></div>;
 
   const isReadOnly = student.statut === 'ABANDONNE';
 
   // Prochains Examens
   const upcomingExams = useMemo(() => {
-    return db.sessions.filter(s =>
-      (s.groupId === student.groupTDId || s.groupId === student.groupTPId) &&
+    return db.seances.filter(s =>
+      (s.idGroupe === student.idGroupeTD || s.idGroupe === student.idGroupeTP) &&
       s.type === 'Examen' &&
       s.statut !== 'ANNULEE'
     ).slice(0, 3);
-  }, [db.sessions, student]);
+  }, [db.seances, student]);
 
   // Notes Publiées
-  const myGrades = useMemo(() => db.grades.filter(g => g.studentId === student.id && g.publiee), [db.grades, student.id]);
+  const myGrades = useMemo(() => db.notes.filter(g => g.idEtudiant === student.id), [db.notes, student.id]);
 
   // Annonces
   const myAnnonces = useMemo(() => {
-    const filtered = db.announcements.filter(a =>
-      a.target === 'all' || (a.target === 'filiere' && a.filiereId === student.filiereId)
+    const filtered = db.annonces.filter(a =>
+      a.cible === 'Tous' || (a.cible === 'filiere' && a.idFiliere === student.idFiliere)
     );
     return [...filtered].sort((a, b) => {
-      if (a.urgente && !b.urgente) return -1;
-      if (!a.urgente && b.urgente) return 1;
-      return new Date(b.createdAt) - new Date(a.createdAt);
+      if (a.urgent && !b.urgent) return -1;
+      if (!a.urgent && b.urgent) return 1;
+      return new Date(b.dateCreation) - new Date(a.dateCreation);
     }).slice(0, 5);
-  }, [db.announcements, student.filiereId]);
+  }, [db.annonces, student.idFiliere]);
 
   // Documents récents
   const recentDocs = useMemo(() => {
-    const studentModules = db.modules.filter(m => m.filiereId === student.filiereId).map(m => m.id);
+    const studentModules = db.modules.filter(m => m.idFiliere === student.idFiliere).map(m => m.id);
     return db.documents
-      .filter(d => studentModules.includes(d.moduleId))
-      .sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt))
+      .filter(d => studentModules.includes(d.idModule || d.moduleId))
+      .sort((a, b) => new Date(b.dateUpload) - new Date(a.dateUpload))
       .slice(0, 4);
-  }, [db.documents, db.modules, student.filiereId]);
+  }, [db.documents, db.modules, student.idFiliere]);
 
   // PFE / Stage (pour les deadlines)
-  const myPFE = db.pfes.find(p => p.studentIds.includes(student.id));
+  const myPFE = db.pfes.find(p => p.idEtudiant === student.id || (p.studentIds && p.studentIds.includes(student.id)));
 
   return (
     <div className="dashboard-page">
       {/* Hero */}
       <div className="page-hero animate-up">
         <div className="page-hero-left">
-          <h2 className="page-hero-title">Content de vous revoir, {student.name.split(' ')[0]}</h2>
+          <h2 className="page-hero-title">Content de vous revoir, {user.prenom}</h2>
           <p className="page-hero-sub">
-            {db.filieres.find(f => f.id === student.filiereId)?.name} • Année {student.anneeInscription}
+            {db.filieres.find(f => f.id === student.idFiliere)?.intitule} • Année {student.anneeInscription}
           </p>
         </div>
         <div className="page-hero-right">

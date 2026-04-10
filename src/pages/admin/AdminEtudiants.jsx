@@ -19,19 +19,20 @@ const AdminEtudiants = () => {
 
   // Form State
   const [formData, setFormData] = useState({
-    CNE: '', name: '', email: '', filiereId: '', groupTDId: '', groupTPId: '', statut: 'ACTIF'
+    cne: '', nom: '', prenom: '', email: '', idFiliere: '', idGroupeTD: '', idGroupeTP: '', statut: 'ACTIF'
   });
 
   const filteredStudents = useMemo(() => {
-    return db.students.filter(s => {
-      const matchesSearch = s.name.toLowerCase().includes(search.toLowerCase()) || 
-                           (s.CNE && s.CNE.toLowerCase().includes(search.toLowerCase())) ||
+    return db.etudiants.filter(s => {
+      const user = db.utilisateurs.find(u => u.id === s.utilisateurId) || s;
+      const fullName = `${user.prenom || ''} ${user.nom || ''}`.toLowerCase();
+      const matchesSearch = fullName.includes(search.toLowerCase()) || 
                            (s.cne && s.cne.toLowerCase().includes(search.toLowerCase()));
-      const matchesFiliere = selectedFiliereId ? s.filiereId === selectedFiliereId : true;
+      const matchesFiliere = selectedFiliereId ? s.idFiliere === selectedFiliereId : true;
       const matchesYear = selectedYear ? (s.anneeInscription === selectedYear) : true;
       return matchesSearch && matchesFiliere && matchesYear;
     });
-  }, [db.students, search, selectedFiliereId, selectedYear]);
+  }, [db.etudiants, db.utilisateurs, search, selectedFiliereId, selectedYear]);
 
   const filiereClasses = useMemo(() => {
     if (selectedFiliereId) {
@@ -39,65 +40,89 @@ const AdminEtudiants = () => {
       if (!filiere) return [];
       const years = [];
       for (let i = 1; i <= (filiere.duree || 3); i++) {
-        const count = db.students.filter(s => s.filiereId === selectedFiliereId && s.anneeInscription === i).length;
+        const count = db.etudiants.filter(s => s.idFiliere === selectedFiliereId && s.anneeInscription === i).length;
         years.push({ year: i, count });
       }
       return years;
     }
     return db.filieres.map(f => ({
       ...f,
-      count: db.students.filter(s => s.filiereId === f.id).length
+      count: db.etudiants.filter(s => s.idFiliere === f.id).length
     }));
-  }, [db.filieres, db.students, selectedFiliereId]);
+  }, [db.filieres, db.etudiants, selectedFiliereId]);
 
   const handleOpenAdd = () => {
     setEditingStudent(null);
     setFormData({ 
-      CNE: '', name: '', email: '', 
-      filiereId: selectedFiliereId || '', 
+      cne: '', nom: '', prenom: '', email: '', 
+      idFiliere: selectedFiliereId || '', 
       anneeInscription: selectedYear || 1,
-      groupTDId: '', groupTPId: '', statut: 'ACTIF' 
+      idGroupeTD: '', idGroupeTP: '', statut: 'ACTIF' 
     });
     setShowPanel(true);
   };
 
   const handleEdit = (student) => {
+    const user = db.utilisateurs.find(u => u.id === student.utilisateurId) || {};
     setEditingStudent(student);
-    setFormData({ ...student, CNE: student.CNE || student.cne || '' });
+    setFormData({ 
+      ...student, 
+      nom: user.nom || student.nom || '', 
+      prenom: user.prenom || student.prenom || '',
+      email: user.email || student.email || ''
+    });
     setShowPanel(true);
   };
 
   const handleDelete = (id) => {
     // Check constraints
-    const hasAbsences = db.absences.some(a => a.studentId === id);
-    const hasGrades = db.grades.some(g => g.studentId === id);
+    const hasAbsences = db.absences.some(a => a.idEtudiant === id);
+    const hasGrades = db.notes.some(g => g.idEtudiant === id);
     if (hasAbsences || hasGrades) {
       error('Interdit', 'Cet étudiant possède des données liées (absences/notes) et ne peut être supprimé.');
       return;
     }
 
     if (window.confirm('Êtes-vous sûr de vouloir supprimer définitivement cet étudiant ?')) {
-      remove('students', id);
+      remove('etudiants', id);
       success('Supprimé', 'Le dossier étudiant a été supprimé.');
     }
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!formData.name || !formData.CNE || !formData.filiereId) {
+    if (!formData.nom || !formData.cne || !formData.idFiliere) {
       error('Manquant', 'Veuillez remplir les informations obligatoires.');
       return;
     }
 
-    const studentData = {
-      ...formData,
-      id: editingStudent ? editingStudent.id : nextId('students'),
-      filiereId: parseInt(formData.filiereId),
-      groupTDId: formData.groupTDId ? parseInt(formData.groupTDId) : null,
-      groupTPId: formData.groupTPId ? parseInt(formData.groupTPId) : null,
-      anneeInscription: parseInt(formData.anneeInscription || 1),
+    const userId = editingStudent?.utilisateurId || nextId('utilisateurs');
+    const studentId = editingStudent ? editingStudent.id : nextId('etudiants');
+
+    const userData = {
+      id: userId,
+      nom: formData.nom,
+      prenom: formData.prenom,
+      email: formData.email,
+      role: 'student',
+      statut: 'ACTIF'
     };
-    save('students', studentData);
+
+    const studentData = {
+      id: studentId,
+      idEtudiant: studentId,
+      utilisateurId: userId,
+      cne: formData.cne,
+      idFiliere: parseInt(formData.idFiliere),
+      idGroupeTD: formData.idGroupeTD ? parseInt(formData.idGroupeTD) : null,
+      idGroupeTP: formData.idGroupeTP ? parseInt(formData.idGroupeTP) : null,
+      anneeInscription: parseInt(formData.anneeInscription || 1),
+      statut: formData.statut
+    };
+
+    save('utilisateurs', userData);
+    save('etudiants', studentData);
+    
     success(editingStudent ? 'Mis à jour' : 'Inscrit', 'Le dossier de l\'étudiant est à jour.');
     setShowPanel(false);
   };
