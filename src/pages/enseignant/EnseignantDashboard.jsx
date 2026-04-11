@@ -4,9 +4,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
 /* ── Helpers ────────────────────────────────────────────── */
-const DAY_NAMES = ['', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+const DAY_NAMES = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 const TODAY_DOW = new Date().getDay(); // 0=Sun
-const todayIdx = TODAY_DOW === 0 ? 7 : TODAY_DOW;
+const todayName = DAY_NAMES[TODAY_DOW];
 
 const TYPE_COLOR = {
   Cours:  { bg: '#dbeafe', color: '#1e40af', border: '#3b82f6' },
@@ -56,23 +56,31 @@ const EnseignantDashboard = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('today');
 
-  const teacher = useMemo(() => db.enseignants.find(t => t.utilisateurId === currentUser.id), [db.enseignants, currentUser.id]);
-  const teacherId = teacher?.id;
+  const teacher = useMemo(() => db.enseignants.find(t => t.utilisateurId == currentUser?.id), [db.enseignants, currentUser?.id]);
+  const teacherId = teacher?.idEnseignant || teacher?.id;
 
-  const myModules = useMemo(() =>
-    db.modules.filter(m => (m.idEnseignant === teacherId || m.teacherId === teacherId)),
-    [db.modules, teacherId]);
+  const myModules = useMemo(() => {
+    const affectedModuleIds = new Set(db.affectations?.filter(a => (a.idEnseignant || a.teacherId) == teacherId).map(a => a.idModule || a.moduleId) || []);
+    return db.modules.filter(m => {
+      const isAssigned = (m.idEnseignant || m.teacherId) == teacherId || affectedModuleIds.has(m.id || m.idModule);
+      return isAssigned;
+    });
+  }, [db.modules, db.affectations, teacherId]);
 
   const mySessions = useMemo(() =>
-    db.seances.filter(s => (s.idEnseignant === teacherId || s.teacherId === teacherId)),
+    db.seances.filter(s => s.idEnseignant == teacherId || s.teacherId == teacherId),
     [db.seances, teacherId]);
 
   const todaySessions = useMemo(() =>
-    mySessions.filter(s => (s.jourNum || s.day) === todayIdx).sort((a, b) => (a.heureDebut || a.startSlot || '').localeCompare(b.heureDebut || b.startSlot || '')),
-    [mySessions]);
+    mySessions.filter(s => s.jour === todayName).sort((a, b) => (a.heureDebut || '').localeCompare(b.heureDebut || '')),
+    [mySessions, todayName]);
 
   const weekSessions = useMemo(() =>
-    mySessions.slice().sort((a, b) => (a.jourNum || a.day) - (b.jourNum || b.day) || (a.heureDebut || a.startSlot || '').localeCompare(b.heureDebut || b.startSlot || '')),
+    mySessions.slice().sort((a, b) => {
+      const dayA = DAY_NAMES.indexOf(a.jour);
+      const dayB = DAY_NAMES.indexOf(b.jour);
+      return dayA - dayB || (a.heureDebut || '').localeCompare(b.heureDebut || '');
+    }),
     [mySessions]);
 
   const pendingAbsences = useMemo(() => {
@@ -138,17 +146,15 @@ const EnseignantDashboard = () => {
               )}
               {activeTab === 'week' && (
                 weekSessions.map((s, idx) => {
-                  const sDay = s.jourNum || s.day;
-                  const prevSDay = idx > 0 ? (weekSessions[idx - 1].jourNum || weekSessions[idx - 1].day) : null;
-                  const dayChanged = idx === 0 || sDay !== prevSDay;
+                  const dayChanged = idx === 0 || s.jour !== weekSessions[idx - 1].jour;
                   return (
                     <React.Fragment key={s.id}>
                       {dayChanged && (
                         <div className="ens-day-divider">
-                          <span>{DAY_NAMES[sDay]}</span>
+                          <span>{s.jour}</span>
                         </div>
                       )}
-                      <SessionRow session={s} moduleName={moduleName} roomName={roomName} groupName={groupName} highlight={sDay === todayIdx} />
+                      <SessionRow session={s} moduleName={moduleName} roomName={roomName} groupName={groupName} highlight={s.jour === todayName} />
                     </React.Fragment>
                   );
                 })

@@ -4,258 +4,338 @@ import { useToast } from '../../contexts/ToastContext';
 import { 
   FileText, Search, Download, Filter, GraduationCap, 
   AlertCircle, X, Save, Edit3, CheckCircle, ChevronRight,
-  TrendingUp, TrendingDown, Minus
+  TrendingUp, TrendingDown, Minus, ArrowLeft, BookOpen, Layers, Users,
+  ChevronLeft
 } from 'lucide-react';
 
 const AdminNotes = () => {
-  const { db, studentName, filiereName, moduleName, save } = useData();
-  const { success, info, warning } = useToast();
+  const { db, studentName, filiereName, moduleName, save, groupName } = useData();
+  const { success, info } = useToast();
   
-  const [filiereFilter, setFiliereFilter] = useState('');
+  const [viewLevel, setViewLevel] = useState('filieres'); // 'filieres', 'modules', 'grades'
+  const [selectedFiliereId, setSelectedFiliereId] = useState(null);
+  const [selectedModuleId, setSelectedModuleId] = useState(null);
+  
   const [search, setSearch] = useState('');
+  const [groupFilter, setGroupFilter] = useState('ALL');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 15;
+
   const [showPanel, setShowPanel] = useState(false);
   const [selectedGrade, setSelectedGrade] = useState(null);
   const [formData, setFormData] = useState({ cc: '', exam: '', final: '' });
 
-  const grades = useMemo(() => {
-    const list = db.notes || db.grades || [];
-    return list.filter(g => {
-      const studentId = g.idEtudiant || g.studentId;
-      const student = db.etudiants?.find(s => s.id === studentId) || db.students?.find(s => s.id === studentId);
-      const matchesFiliere = !filiereFilter || (student?.idFiliere || student?.filiereId) === parseInt(filiereFilter);
-      const studentUser = db.utilisateurs.find(u => u.id === student?.utilisateurId);
-      const sName = studentUser ? `${studentUser.prenom} ${studentUser.nom}` : (student?.nom || student?.name || '');
-      const matchesSearch = !search || sName.toLowerCase().includes(search.toLowerCase()) || 
-                           (student?.cne || '').toLowerCase().includes(search.toLowerCase());
-      return matchesFiliere && matchesSearch;
-    });
-  }, [db.notes, db.grades, db.etudiants, db.students, db.utilisateurs, filiereFilter, search]);
+  // --- 1. Data Selection Logic ---
 
-  // --- Handlers ---
-  const handleExportPV = () => {
-    info('Génération PV', 'Le Procès-Verbal global est en cours de préparation...');
-    setTimeout(() => {
-      success('PV Généré', 'Le document officiel a été téléchargé.');
-    }, 2000);
+  const filieres = useMemo(() => db.filieres || [], [db.filieres]);
+
+  const modulesForFiliere = useMemo(() => {
+    if (!selectedFiliereId) return [];
+    const fid = String(selectedFiliereId);
+    return (db.modules || []).filter(m => String(m.idFiliere || m.filiereId) === fid);
+  }, [db.modules, selectedFiliereId]);
+
+  const availableGroups = useMemo(() => {
+    if (!selectedFiliereId) return [];
+    return (db.groupes || []).filter(g => String(g.idFiliere) === String(selectedFiliereId));
+  }, [db.groupes, selectedFiliereId]);
+
+  const fullTableData = useMemo(() => {
+    if (!selectedFiliereId || !selectedModuleId) return [];
+    
+    const fid = String(selectedFiliereId);
+    const mid = String(selectedModuleId);
+    
+    let students = (db.etudiants || []).filter(s => String(s.idFiliere || s.filiereId) === fid);
+    
+    // Apply Group Filter
+    if (groupFilter !== 'ALL') {
+      students = students.filter(s => 
+        String(s.idGroupeTD) === groupFilter || String(s.idGroupeTP) === groupFilter
+      );
+    }
+
+    return students.map(s => {
+      const sid = s.id || s.idEtudiant;
+      const grade = (db.notes || []).find(g => 
+        String(g.idEtudiant || g.studentId) === String(sid) && 
+        String(g.idModule || g.moduleId) === mid
+      );
+      
+      return {
+        student: s,
+        grade: grade || { 
+          idEtudiant: sid, 
+          idModule: parseInt(mid), 
+          valeurCC: 0, 
+          valeurEF: 0, 
+          moyenneModule: 0,
+          isPlaceholder: true 
+        }
+      };
+    });
+  }, [db.etudiants, db.notes, selectedFiliereId, selectedModuleId, groupFilter]);
+
+  // Paginated View
+  const paginatedData = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return fullTableData.slice(start, start + itemsPerPage);
+  }, [fullTableData, currentPage]);
+
+  const totalPages = Math.ceil(fullTableData.length / itemsPerPage);
+
+  // Global search mode
+  const searchResults = useMemo(() => {
+    if (!search) return [];
+    const term = search.toLowerCase();
+    return (db.notes || []).filter(g => {
+      const sId = g.idEtudiant || g.studentId;
+      const s = (db.etudiants || []).find(st => String(st.id || st.idEtudiant) === String(sId));
+      const u = (db.utilisateurs || []).find(user => user.id === s?.utilisateurId);
+      const name = u ? `${u.prenom} ${u.nom}`.toLowerCase() : (s?.name || '').toLowerCase();
+      return name.includes(term) || (s?.cne || '').toLowerCase().includes(term);
+    }).slice(0, 30);
+  }, [db.notes, db.etudiants, db.utilisateurs, search]);
+
+  // --- 2. Handlers ---
+
+  const handleSelectFiliere = (id) => {
+    setSelectedFiliereId(id);
+    setViewLevel('modules');
+    setGroupFilter('ALL');
   };
 
-  const handleOpenDetail = (grade) => {
-    setSelectedGrade(grade);
-    setFormData({ 
-      cc: grade.valeurCC || grade.cc || '', 
-      exam: grade.valeurEF || grade.exam || '', 
-      final: grade.moyenne || grade.final || '' 
+  const handleSelectModule = (id) => {
+    setSelectedModuleId(id);
+    setViewLevel('grades');
+    setCurrentPage(1);
+  };
+
+  const resetAll = () => {
+    setViewLevel('filieres');
+    setSelectedFiliereId(null);
+    setSelectedModuleId(null);
+    setSearch('');
+    setCurrentPage(1);
+  };
+
+  const handleOpenEdit = (item) => {
+    const g = item.grade || item;
+    setSelectedGrade(g);
+    setFormData({
+      cc: g.valeurCC || g.cc || 0,
+      exam: g.valeurEF || g.exam || 0,
+      final: g.moyenneModule || g.moyenne || g.final || 0
     });
     setShowPanel(true);
   };
 
-  const handleSaveNotes = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
-    const updated = {
+    await save('notes', {
       ...selectedGrade,
-      idEtudiant: selectedGrade.idEtudiant || selectedGrade.studentId,
-      idModule: selectedGrade.idModule || selectedGrade.moduleId,
       valeurCC: parseFloat(formData.cc),
       valeurEF: parseFloat(formData.exam),
-      moyenne: parseFloat(formData.final),
-      // Legacy keep
-      cc: parseFloat(formData.cc),
-      exam: parseFloat(formData.exam),
-      final: parseFloat(formData.final)
-    };
-    save('notes', updated);
+      moyenneModule: parseFloat(formData.final),
+      moyenne: parseFloat(formData.final)
+    });
     setShowPanel(false);
-    success('Notes rectifiées', 'La moyenne a été mise à jour dans le système.');
+    success('Enregistré');
   };
 
-  // Auto-calculate final if CC or Exam changes
-  const updateFinal = (newCC, newExam) => {
-    const ccVal = parseFloat(newCC) || 0;
-    const examVal = parseFloat(newExam) || 0;
-    const finalVal = (ccVal * 0.4 + examVal * 0.6).toFixed(2); // Standard weighting
-    setFormData(prev => ({ ...prev, cc: newCC, exam: newExam, final: finalVal }));
+  // --- 3. UI Parts ---
+
+  const Pagination = () => {
+    if (totalPages <= 1) return null;
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', marginTop: '24px' }}>
+        <button className="btn btn-ghost btn-sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>
+          <ChevronLeft size={16} /> Précédent
+        </button>
+        <span style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-3)' }}>
+          Page {currentPage} sur {totalPages}
+        </span>
+        <button className="btn btn-ghost btn-sm" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}>
+          Suivant <ChevronRight size={16} />
+        </button>
+      </div>
+    );
   };
 
   return (
-    <div className="page-area fade-in">
+    <div className="page-content">
       <div className="page-hero animate-up">
         <div className="page-hero-left">
-          <h2 className="page-hero-title">Gestion des Notes & Procès-verbaux</h2>
-          <p className="page-hero-sub">Consultation globale des résultats académiques et validation des relevés</p>
+          <h2 className="page-hero-title">Notes & Examens</h2>
+          <p className="page-hero-sub">Saisie et délibération par module</p>
         </div>
-        <button className="btn btn-primary" onClick={handleExportPV}>
-          <Download size={18} style={{ marginRight: '8px' }} /> Exporter PV Global
-        </button>
-      </div>
-
-      <div className="page-card animate-up" style={{ padding: '16px', marginBottom: '24px', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-        <div style={{ position: 'relative', flex: 1, minWidth: '300px' }}>
-          <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)' }} />
-          <input 
-            type="text" 
-            placeholder="Rechercher un étudiant par nom ou CNE..." 
-            className="form-control"
-            style={{ paddingLeft: '40px', width: '100%' }}
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-        </div>
-        <select className="form-control" style={{ width: '220px' }} value={filiereFilter} onChange={e => setFiliereFilter(e.target.value)}>
-          <option value="">Toutes les filières</option>
-          {db.filieres.map(f => <option key={f.id} value={f.id}>{f.code} - {f.name}</option>)}
-        </select>
-      </div>
-
-      <div className="page-card animate-up">
-        <div className="table-wrap">
-          <table style={{ width: '100%' }}>
-            <thead>
-              <tr>
-                <th style={{ padding: '15px 20px' }}>Étudiant</th>
-                <th>Filière</th>
-                <th>Module</th>
-                <th>Note Finale</th>
-                <th>Statut</th>
-                <th style={{ textAlign: 'right', padding: '15px 20px' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {grades.map(g => {
-                const sId = g.idEtudiant || g.studentId;
-                const mId = g.idModule || g.moduleId;
-                const s = db.etudiants?.find(st => st.id === sId) || db.students?.find(st => st.id === sId);
-                const valFinal = g.moyenne || g.final || 0;
-                const isValidation = valFinal >= 12;
-                return (
-                  <tr key={g.id} className="hover-row">
-                    <td style={{ padding: '15px 20px' }}>
-                      <div style={{ fontWeight: '700', color: 'var(--blue-dark)' }}>{studentName(sId)}</div>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--text-3)' }}>{s?.cne}</div>
-                    </td>
-                    <td><span className="badge badge-gray">{filiereName(s?.idFiliere || s?.filiereId)}</span></td>
-                    <td><div style={{ fontSize: '0.85rem', color: 'var(--text-2)', fontWeight: '600' }}>{moduleName(mId)}</div></td>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <div style={{ fontSize: '1.1rem', fontWeight: '800', color: isValidation ? 'var(--success)' : 'var(--danger)' }}>
-                          {valFinal.toFixed(2)}
-                        </div>
-                        {valFinal > 15 ? <TrendingUp size={14} color="var(--success)" /> : valFinal < 10 ? <TrendingDown size={14} color="var(--danger)" /> : <Minus size={14} color="var(--text-3)" />}
-                      </div>
-                    </td>
-                    <td>
-                      <span className={`badge ${isValidation ? 'badge-green' : 'badge-red'}`}>
-                        {isValidation ? 'Validé' : 'Ajourné'}
-                      </span>
-                    </td>
-                    <td style={{ textAlign: 'right', padding: '15px 20px' }}>
-                       <button className="btn btn-ghost btn-sm" onClick={() => handleOpenDetail(g)} title="Ajuster les notes">
-                          <Edit3 size={16} />
-                       </button>
-                    </td>
-                  </tr>
-                );
-              })}
-              {grades.length === 0 && (
-                <tr><td colSpan="6" className="table-empty">Aucune note enregistrée pour ces critères.</td></tr>
-              )}
-            </tbody>
-          </table>
+        <div style={{ position: 'relative', width: '300px' }}>
+           <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)' }} />
+           <input type="text" className="form-control" style={{ paddingLeft: '40px' }} placeholder="Recherche rapide..." value={search} onChange={e => setSearch(e.target.value)} />
         </div>
       </div>
 
-      {/* Side Panel: Grade Detail & Edit */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '24px', fontSize: '0.85rem', color: 'var(--text-3)' }}>
+        <button onClick={resetAll} className="btn-link">Classes</button>
+        {selectedFiliereId && <><ChevronRight size={14} /><button onClick={() => setViewLevel('modules')} className="btn-link">{filiereName(selectedFiliereId)}</button></>}
+        {selectedModuleId && <><ChevronRight size={14} /><span style={{ fontWeight: '800', color: 'var(--blue-dark)' }}>{moduleName(selectedModuleId)}</span></>}
+      </div>
+
+      {search ? (
+        <div className="animate-up">
+           {/* Render search results table */}
+           <div className="page-card table-wrap">
+             <table style={{ width: '100%' }}>
+                <thead><tr><th>Étudiant</th><th>Module</th><th>Moyenne</th><th>Action</th></tr></thead>
+                <tbody>
+                   {searchResults.map(g => (
+                     <tr key={g.id || g.idNote} className="hover-row">
+                       <td style={{ padding: '12px 20px' }}>{studentName(g.idEtudiant)}</td>
+                       <td>{moduleName(g.idModule)}</td>
+                       <td style={{ fontWeight: '800' }}>{parseFloat(g.moyenne || 0).toFixed(2)}</td>
+                       <td style={{ textAlign: 'right' }}><button className="btn btn-ghost btn-sm" onClick={() => handleOpenEdit(g)}><Edit3 size={16} /></button></td>
+                     </tr>
+                   ))}
+                </tbody>
+             </table>
+           </div>
+        </div>
+      ) : (
+        <div className="animate-up">
+           {viewLevel === 'filieres' && (
+             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '20px' }}>
+                {filieres.map(f => (
+                  <div key={f.id || f.idFiliere} className="page-card hover-card" onClick={() => handleSelectFiliere(f.id || f.idFiliere)} style={{ cursor: 'pointer', padding: '24px' }}>
+                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                        <Layers size={20} color="var(--blue-mid)" />
+                        <span style={{ fontWeight: '900', color: 'var(--blue-dark)' }}>{f.code}</span>
+                     </div>
+                     <div style={{ fontSize: '0.9rem', color: 'var(--text-2)', fontWeight: '600' }}>{f.intitule}</div>
+                  </div>
+                ))}
+             </div>
+           )}
+
+           {viewLevel === 'modules' && (
+             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
+                {modulesForFiliere.map(m => (
+                  <div key={m.id || m.idModule} className="page-card hover-card" onClick={() => handleSelectModule(m.id || m.idModule)} style={{ cursor: 'pointer', padding: '20px' }}>
+                     <div className="badge badge-blue" style={{ marginBottom: '10px' }}>{m.code}</div>
+                     <div style={{ fontWeight: '800', color: 'var(--blue-dark)' }}>{m.intitule}</div>
+                  </div>
+                ))}
+             </div>
+           )}
+
+           {viewLevel === 'grades' && (
+             <>
+               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                     <Filter size={16} color="var(--text-3)" />
+                     <select className="form-control" style={{ width: '180px', height: '36px', fontSize: '0.8rem' }} value={groupFilter} onChange={e => { setGroupFilter(e.target.value); setCurrentPage(1); }}>
+                        <option value="ALL">Tous les groupes</option>
+                        {availableGroups.map(g => <option key={g.idGroupe} value={g.idGroupe}>{g.nom}</option>)}
+                     </select>
+                  </div>
+                  <div style={{ fontSize: '0.8rem', fontWeight: '700', color: 'var(--text-3)' }}>
+                     {fullTableData.length} étudiants trouvés
+                  </div>
+               </div>
+
+               <div className="page-card table-wrap">
+                 <table style={{ width: '100%' }}>
+                    <thead>
+                       <tr>
+                          <th style={{ padding: '15px 20px' }}>Étudiant</th>
+                          <th>CC (40%)</th>
+                          <th>Exam (60%)</th>
+                          <th>Moyenne</th>
+                          <th>Statut</th>
+                          <th style={{ textAlign: 'right', padding: '15px 20px' }}>Actions</th>
+                       </tr>
+                    </thead>
+                    <tbody>
+                       {paginatedData.map((item, idx) => {
+                          const g = item.grade;
+                          const moy = parseFloat(g.moyenneModule || 0);
+                          const isValid = moy >= 12;
+                          return (
+                            <tr key={idx} className="hover-row">
+                               <td style={{ padding: '12px 20px' }}>
+                                  <div style={{ fontWeight: '700', color: 'var(--blue-dark)' }}>{studentName(g.idEtudiant)}</div>
+                                  <div style={{ fontSize: '0.7rem', color: 'var(--text-3)' }}>{item.student.cne}</div>
+                               </td>
+                               <td>{parseFloat(g.valeurCC || 0).toFixed(1)}</td>
+                               <td>{parseFloat(g.valeurEF || 0).toFixed(1)}</td>
+                               <td style={{ fontWeight: '900', color: isValid ? 'var(--success)' : 'var(--danger)' }}>{moy.toFixed(2)}</td>
+                               <td><span className={`badge ${isValid ? 'badge-green' : 'badge-red'}`}>{isValid ? 'Validé' : 'Ajourné'}</span></td>
+                               <td style={{ textAlign: 'right', padding: '12px 20px' }}>
+                                  <button className="btn btn-ghost btn-sm" onClick={() => handleOpenEdit(item)}><Edit3 size={16} /></button>
+                               </td>
+                            </tr>
+                          );
+                       })}
+                    </tbody>
+                 </table>
+                 {fullTableData.length === 0 && <div className="table-empty">Aucun étudiant dans cette sélection.</div>}
+               </div>
+               <Pagination />
+             </>
+           )}
+        </div>
+      )}
+
+      {/* Slide Panel for Editing */}
       <div className={`side-panel-overlay ${showPanel ? 'open' : ''}`} onClick={() => setShowPanel(false)}>
-        <div className="side-panel" style={{ width: '450px' }} onClick={e => e.stopPropagation()}>
-          <div className="side-panel-header">
-            <div>
-              <h3 className="side-panel-title">Détail des Évaluations</h3>
-              <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-3)' }}>{studentName(selectedGrade?.idEtudiant || selectedGrade?.studentId)}</p>
-            </div>
-            <button className="modal-close" onClick={() => setShowPanel(false)}><X size={20} /></button>
+        <div className="side-panel" style={{ width: '400px' }} onClick={e => e.stopPropagation()}>
+          <div className="side-panel-header" style={{ padding: '20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
+            <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '800' }}>Modifier Note</h3>
+            <X size={20} onClick={() => setShowPanel(false)} style={{ cursor: 'pointer' }} />
           </div>
-          <div className="side-panel-body">
-            {selectedGrade && (
-              <form id="gradeForm" onSubmit={handleSaveNotes} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                <div style={{ padding: '20px', background: 'var(--bg)', borderRadius: '16px', border: '1px solid var(--border)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', color: 'var(--blue-dark)', fontWeight: '800', fontSize: '0.8rem', textTransform: 'uppercase' }}>
-                    <GraduationCap size={16} /> Module : {moduleName(selectedGrade.idModule || selectedGrade.moduleId)}
+          <div className="side-panel-body" style={{ padding: '20px' }}>
+             {selectedGrade && (
+               <form onSubmit={handleSave} id="editForm">
+                  <div style={{ marginBottom: '15px', fontWeight: '700', color: 'var(--blue-dark)' }}>{studentName(selectedGrade.idEtudiant)}</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
+                     <div className="form-group">
+                        <label className="form-label">Note CC</label>
+                        <input type="number" step="0.25" className="form-control" value={formData.cc} onChange={e => {
+                           const cc = e.target.value;
+                           const res = (parseFloat(cc || 0) * 0.4 + parseFloat(formData.exam || 0) * 0.6).toFixed(2);
+                           setFormData({...formData, cc, final: res});
+                        }} />
+                     </div>
+                     <div className="form-group">
+                        <label className="form-label">Note Exam</label>
+                        <input type="number" step="0.25" className="form-control" value={formData.exam} onChange={e => {
+                           const ex = e.target.value;
+                           const res = (parseFloat(formData.cc || 0) * 0.4 + parseFloat(ex || 0) * 0.6).toFixed(2);
+                           setFormData({...formData, exam: ex, final: res});
+                        }} />
+                     </div>
                   </div>
-                  
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                    <div className="form-group">
-                      <label className="form-label">Note CC (40%)</label>
-                      <input 
-                        type="number" step="0.25" min="0" max="20" className="form-control"
-                        value={formData.cc}
-                        onChange={e => updateFinal(e.target.value, formData.exam)}
-                        required
-                        style={{ fontWeight: '700', fontSize: '1.1rem' }}
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Note Examen (60%)</label>
-                      <input 
-                        type="number" step="0.25" min="0" max="20" className="form-control"
-                        value={formData.exam}
-                        onChange={e => updateFinal(formData.cc, e.target.value)}
-                        required
-                        style={{ fontWeight: '700', fontSize: '1.1rem' }}
-                      />
-                    </div>
+                  <div style={{ textAlign: 'center', padding: '20px', background: 'var(--surface-2)', borderRadius: '10px' }}>
+                     <div style={{ fontSize: '0.7rem', fontWeight: '800' }}>MOYENNE</div>
+                     <div style={{ fontSize: '2rem', fontWeight: '950', color: 'var(--blue-dark)' }}>{formData.final}</div>
                   </div>
-                </div>
-
-                <div style={{ textAlign: 'center', padding: '32px 20px', borderRadius: '16px', border: '2px solid var(--blue-mid)', background: 'rgba(30,58,95,0.02)' }}>
-                  <div style={{ fontSize: '0.8rem', fontWeight: '800', color: 'var(--text-3)', textTransform: 'uppercase', marginBottom: '8px' }}>
-                    Moyenne Calculée
-                  </div>
-                  <div style={{ fontSize: '3rem', fontWeight: '950', color: 'var(--blue-dark)', lineHeight: '1' }}>
-                    {formData.final}
-                  </div>
-                  <div style={{ marginTop: '16px' }}>
-                    <span className={`badge ${parseFloat(formData.final) >= 12 ? 'badge-green' : 'badge-red'}`} style={{ fontSize: '0.9rem', padding: '6px 16px' }}>
-                      {parseFloat(formData.final) >= 12 ? 'Validation Acquise' : 'Module Non Validé'}
-                    </span>
-                  </div>
-                </div>
-
-                <div style={{ padding: '16px', background: '#fffbeb', borderRadius: '12px', border: '1px solid #fef3c7', color: '#92400e', fontSize: '0.8rem', display: 'flex', gap: '12px' }}>
-                  <AlertCircle size={20} />
-                  <div>
-                    <strong>Avertissement :</strong> Toute modification manuelle des notes sera enregistrée dans les logs d'audit et impactera immédiatement le PV de délibération.
-                  </div>
-                </div>
-              </form>
-            )}
+               </form>
+             )}
           </div>
-          <div className="side-panel-footer">
-            <button className="btn btn-ghost" onClick={() => setShowPanel(false)}>Annuler</button>
-            <button type="submit" form="gradeForm" className="btn btn-primary">
-              <Save size={18} style={{ marginRight: '8px' }} /> Valider la Note
-            </button>
+          <div className="side-panel-footer" style={{ padding: '20px', borderTop: '1px solid var(--border)', display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+             <button className="btn btn-ghost" onClick={() => setShowPanel(false)}>Annuler</button>
+             <button type="submit" form="editForm" className="btn btn-primary">Enregistrer</button>
           </div>
         </div>
       </div>
 
       <style>{`
-        .side-panel-overlay {
-          position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-          background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(4px);
-          z-index: 1000; opacity: 0; visibility: hidden; transition: all 0.3s ease;
-        }
+        .btn-link { background: none; border: none; padding: 0; cursor: pointer; color: var(--text-3); font-weight: 500; font-family: inherit; }
+        .btn-link:hover { text-decoration: underline; color: var(--blue-mid); }
+        .hover-card:hover { transform: translateY(-2px); border-color: var(--blue-mid); }
+        .side-panel-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.3); backdrop-filter: blur(2px); z-index: 1000; opacity: 0; visibility: hidden; transition: 0.3s; }
         .side-panel-overlay.open { opacity: 1; visibility: visible; }
-        .side-panel {
-          position: absolute; right: 0; top: 0; height: 100%;
-          background: white; box-shadow: -10px 0 30px rgba(0,0,0,0.1);
-          display: flex; flex-direction: column;
-          transform: translateX(100%); transition: transform 0.3s ease;
-        }
+        .side-panel { position: absolute; right: 0; top: 0; height: 100%; background: white; width: 400px; transform: translateX(100%); transition: 0.3s; box-shadow: -5px 0 15px rgba(0,0,0,0.1); }
         .side-panel-overlay.open .side-panel { transform: translateX(0); }
-        .side-panel-header { padding: 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
-        .side-panel-title { font-size: 1.25rem; font-weight: 800; color: var(--blue-dark); margin: 0; }
-        .side-panel-body { flex: 1; padding: 24px; overflow-y: auto; }
-        .side-panel-footer { padding: 20px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 12px; }
-        .hover-row:hover { background: rgba(30,58,95,0.02); }
       `}</style>
     </div>
   );

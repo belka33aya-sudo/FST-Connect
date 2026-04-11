@@ -499,16 +499,18 @@ ul { list-style: none; }
 
 /* --- Slide-in Panels --- */
 .side-panel-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.4);
-  z-index: 1000; display: flex; justify-content: flex-end;
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+  z-index: 2000; display: flex; justify-content: flex-end;
   opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
+  backdrop-filter: blur(2px);
 }
 .side-panel-overlay.open { opacity: 1; pointer-events: auto; }
 .side-panel {
-  width: 100%; max-width: 500px; height: 100%; background: #fff;
-  box-shadow: -5px 0 25px rgba(0,0,0,0.1);
-  transform: translateX(100%); transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  width: 100%; max-width: 480px; height: 100%; background: #fff;
+  box-shadow: -10px 0 30px rgba(0,0,0,0.15);
+  transform: translateX(100%); transition: transform 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
   display: flex; flex-direction: column;
+  z-index: 2001;
 }
 .side-panel-overlay.open .side-panel { transform: translateX(0); }
 .side-panel-header {
@@ -588,11 +590,11 @@ ul { list-style: none; }
 
 .page-area { flex: 1; padding: 1.5rem; transition: opacity 0.3s ease, transform 0.3s ease; }
 .page-area.fade-out { opacity: 0; transform: translateY(10px); }
-.page-area.fade-in { opacity: 1; transform: translateY(0); }
+.page-area.fade-in { opacity: 1; transform: none; }
 
 @keyframes fadeInUp {
   from { opacity: 0; transform: translateY(15px); }
-  to { opacity: 1; transform: translateY(0); }
+  to { opacity: 1; transform: none; }
 }
 
 .animate-up {

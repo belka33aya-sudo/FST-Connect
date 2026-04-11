@@ -1,35 +1,45 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useData } from './DataContext';
+import api from '../services/api';
 
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
-  const { db } = useData();
+  const { db, fetchSync } = useData();
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = localStorage.getItem('gdi_user');
     return saved ? JSON.parse(saved) : null;
   });
 
-  const login = (email, password) => {
-    return new Promise((resolve, reject) => {
-      setTimeout(() => {
-        const user = db.utilisateurs.find(u => u.email.toLowerCase() === email.toLowerCase() && u.motDePasse === password);
-        if (user) {
-          // Reconstruct name for backward compatibility if needed, or use new fields
-          const sessionUser = { ...user, name: `${user.prenom} ${user.nom}` };
-          setCurrentUser(sessionUser);
-          localStorage.setItem('gdi_user', JSON.stringify(sessionUser));
-          resolve(sessionUser);
-        } else {
-          reject(new Error('Email ou mot de passe incorrect.'));
-        }
-      }, 500);
-    });
+  const login = async (email, password) => {
+    try {
+      const data = await api('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password })
+      });
+      
+      const user = data.user;
+      const sessionUser = { ...user, name: `${user.prenom} ${user.nom}` };
+      
+      setCurrentUser(sessionUser);
+      localStorage.setItem('gdi_user', JSON.stringify(sessionUser));
+      localStorage.setItem('gdi_token', data.token); // Add token storage logic
+      
+      // Fetch fresh data immediately upon login
+      if (fetchSync) {
+        fetchSync();
+      }
+      
+      return sessionUser;
+    } catch (error) {
+      throw new Error(error.message || 'Email ou mot de passe incorrect.');
+    }
   };
 
   const logout = () => {
     setCurrentUser(null);
     localStorage.removeItem('gdi_user');
+    localStorage.removeItem('gdi_token');
   };
 
   const can = (action) => {

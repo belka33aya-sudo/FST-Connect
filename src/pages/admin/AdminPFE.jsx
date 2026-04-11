@@ -66,7 +66,7 @@ const AdminPFE = () => {
   };
 
   return (
-    <div className="page-area fade-in">
+    <div className="page-content">
       <div className="page-hero animate-up">
         <div className="page-hero-left">
           <h2 className="page-hero-title">Projets de Fin d'Études (PFE)</h2>
@@ -106,7 +106,7 @@ const AdminPFE = () => {
             </thead>
             <tbody>
               {filteredPFEs.map(pfe => (
-                <tr key={pfe.id}>
+                <tr key={pfe.idPG}>
                   <td style={{ padding: '15px 20px' }}>
                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                         <div style={{ width: '36px', height: '36px', background: 'var(--surface-2)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--blue-mid)' }}>
@@ -120,7 +120,7 @@ const AdminPFE = () => {
                   <td>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <Users size={12} color="var(--text-3)" />
-                      {(pfe.idEtudiant || pfe.studentId) ? studentName(pfe.idEtudiant || pfe.studentId) : pfe.studentIds?.map(id => studentName(id)).join(' & ')}
+                      {studentName(pfe.idEtudiant)}
                     </div>
                   </td>
                   <td>
@@ -191,31 +191,26 @@ const AdminPFE = () => {
                  <input type="datetime-local" className="form-control" value={formData.dateSoutenance.slice(0,16) || ''} onChange={e => setFormData({...formData, dateSoutenance: e.target.value})} />
                </div>
 
-               <div style={{ padding: '16px', background: 'var(--surface-2)', borderRadius: '12px', border: '1px solid var(--border)' }}>
-                 <div style={{ fontSize: '0.75rem', fontWeight: '800', color: 'var(--text-3)', textTransform: 'uppercase', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                   <Award size={14} /> Membres du Jury
-                 </div>
-                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                   {[0, 1, 2].map(i => (
-                     <select 
-                       key={i} 
-                       className="form-control" 
-                       style={{ fontSize: '0.85rem' }}
-                       value={formData.jury[i] || ''} 
-                       onChange={e => {
-                         const n = [...formData.jury]; n[i] = e.target.value; setFormData({...formData, jury: n});
-                       }}
-                     >
-                         <option value="">Membre {i+1}...</option>
-                         {(db.enseignants || db.teachers || []).map(t => {
-                            const user = db.utilisateurs?.find(u => u.id === t.utilisateurId) || t;
-                            const name = user.prenom ? `${user.prenom} ${user.nom}` : (user.name || user.nom);
-                            return <option key={t.id} value={name}>{name}</option>
-                         })}
-                      </select>
-                   ))}
-                 </div>
-               </div>
+                <div style={{ padding: '16px', background: 'var(--surface-2)', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: '0.75rem', fontWeight: '800', color: 'var(--text-3)', textTransform: 'uppercase', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Award size={14} /> Membres du Jury
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <select 
+                      className="form-control" 
+                      style={{ fontSize: '0.85rem' }}
+                      value={formData.jury || ''} 
+                      onChange={e => setFormData({...formData, jury: e.target.value})}
+                    >
+                      <option value="">Sélectionner un jury...</option>
+                      {(db.juries || []).map(j => (
+                        <option key={j.idJury} value={j.idJury}>
+                          Jury #{j.idJury} — {new Date(j.dateSoutenance).toLocaleDateString()}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
             </form>
           </div>
           <div className="side-panel-footer">

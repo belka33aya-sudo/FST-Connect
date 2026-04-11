@@ -8,7 +8,6 @@ const JustificatifForm = ({ absence, onClose, onSubmit, isReadOnly }) => {
   const [fichier, setFichier] = useState(null);
   const [error, setError] = useState('');
 
-  // Préconditions: absence.statut === 'INJUSTIFIEE' && aucun justificatif existant
   const canSubmit = absence.statut === 'INJUSTIFIEE' && !absence.justificatif;
 
   const handleSubmit = (e) => {
@@ -16,7 +15,7 @@ const JustificatifForm = ({ absence, onClose, onSubmit, isReadOnly }) => {
     setError('');
     if (!motif.trim()) { setError('Le motif est obligatoire.'); return; }
     if (fichier && fichier.size > 5 * 1024 * 1024) { setError('La taille du fichier ne doit pas dépasser 5 MB.'); return; }
-    onSubmit({ absenceId: absence.id, motif, fichier });
+    onSubmit({ absenceId: (absence.id || absence.idAbsence), motif, fichier });
   };
 
   if (!canSubmit) {
@@ -24,7 +23,7 @@ const JustificatifForm = ({ absence, onClose, onSubmit, isReadOnly }) => {
       <div style={{ background: 'rgba(239,68,68,.06)', border: '1px solid rgba(239,68,68,.2)', borderRadius: '8px', padding: '1rem', textAlign: 'center', color: '#991b1b', fontSize: '.88rem' }}>
         {absence.statut !== 'INJUSTIFIEE'
           ? `Justificatif non autorisé — Statut: ${absence.statut}`
-          : 'Un justificatif a déjà été soumis pour cette absence (règle : 1 justificatif / absence — non remplaçable).'}
+          : 'Un justificatif a déjà été soumis pour cette absence.'}
       </div>
     );
   }
@@ -35,7 +34,7 @@ const JustificatifForm = ({ absence, onClose, onSubmit, isReadOnly }) => {
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
           <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
         </svg>
-        <span>Statut ABANDONNÉ — actions d'écriture désactivées.</span>
+        <span>Statut ABANDONNÉ — actions désactivées.</span>
       </div>
     );
   }
@@ -43,8 +42,6 @@ const JustificatifForm = ({ absence, onClose, onSubmit, isReadOnly }) => {
   return (
     <form onSubmit={handleSubmit}>
       {error && <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: '8px', padding: '.65rem 1rem', marginBottom: '1rem', color: '#991b1b', fontSize: '.84rem' }}>{error}</div>}
-      {/* absenceId hidden (prérempli) */}
-      <input type="hidden" value={absence.id}/>
       <div className="form-group" style={{ marginBottom: '1rem' }}>
         <label className="form-label">Motif de l'absence <span style={{ color: 'var(--danger)' }}>*</span></label>
         <textarea
@@ -57,7 +54,7 @@ const JustificatifForm = ({ absence, onClose, onSubmit, isReadOnly }) => {
         />
       </div>
       <div className="form-group" style={{ marginBottom: '1.25rem' }}>
-        <label className="form-label">Document justificatif (PDF, JPG, JPEG, PNG — max 5 MB)</label>
+        <label className="form-label">Document justificatif (PDF, Images — max 5 MB)</label>
         <input
           type="file"
           className="form-control"
@@ -65,7 +62,6 @@ const JustificatifForm = ({ absence, onClose, onSubmit, isReadOnly }) => {
           onChange={e => setFichier(e.target.files[0] || null)}
           style={{ height: 'auto', padding: '.5rem .85rem' }}
         />
-        {fichier && <div style={{ fontSize: '.75rem', color: 'var(--text-3)', marginTop: '.3rem' }}>{fichier.name} ({(fichier.size / 1024).toFixed(0)} KB)</div>}
       </div>
       <div style={{ display: 'flex', gap: '.75rem', justifyContent: 'flex-end' }}>
         <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>
@@ -75,44 +71,51 @@ const JustificatifForm = ({ absence, onClose, onSubmit, isReadOnly }) => {
   );
 };
 
-/* ── MODULE 6: Absences Étudiant ── */
 const Absences = () => {
   const { currentUser } = useAuth();
-  const { db, save, getStudentByUserId, studentAbsenceRate, moduleName } = useData();
+  const { db, save, moduleName } = useData();
   const [selectedAbsence, setSelectedAbsence] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [toast, setToast] = useState(null);
 
-  const student = getStudentByUserId(currentUser.id);
+  const student = useMemo(() => 
+    (db.etudiants || []).find(s => s.utilisateurId === currentUser.id), 
+  [db.etudiants, currentUser.id]);
+
   if (!student) return <div className="empty-state"><p>Profil étudiant introuvable.</p></div>;
 
   const isReadOnly = student.statut === 'ABANDONNE';
+  const sid = student.id || student.idEtudiant;
+  const sfid = student.idFiliere || student.filiereId;
 
-  // Filtre server-side: CNE de l'étudiant authentifié (RG38) — ON NE VOIT JAMAIS les absences d'un autre
   const myAbsences = useMemo(() =>
-    db.absences.filter(a => (a.idEtudiant === student.id || a.studentId === student.id)),
-    [db.absences, student.id]
+    (db.absences || []).filter(a => (a.idEtudiant === sid || a.studentId === sid)),
+    [db.absences, sid]
   );
 
   const myModules = useMemo(() => {
-    const filiereModules = db.modules.filter(m => (m.idFiliere === student.idFiliere || m.filiereId === student.filiereId));
+    const filiereModules = (db.modules || []).filter(m => (m.idFiliere === sfid || m.filiereId === sfid));
     return filiereModules.map(mod => {
-      const modSessions = db.seances.filter(s => (s.idModule === mod.id || s.moduleId === mod.id));
-      const modAbsences = myAbsences.filter(a => modSessions.some(s => s.id === (a.idSeance || a.sessionId)));
+      const mid = mod.id || mod.idModule;
+      const modAbsences = myAbsences.filter(a => {
+        const sessionId = a.idSeance || a.sessionId;
+        const session = (db.seances || []).find(s => (s.id || s.idSeance) === sessionId);
+        return (session?.idModule || session?.moduleId) === mid;
+      });
       const injustifiees = modAbsences.filter(a => a.statut === 'INJUSTIFIEE').length;
       const justifiees   = modAbsences.filter(a => a.statut === 'JUSTIFIEE').length;
       const enAttente    = modAbsences.filter(a => a.statut === 'EN_ATTENTE').length;
       const total        = modAbsences.length;
-      const totalSeances = mod.totalSeances || 0;
-      const taux = totalSeances > 0 ? +((total / totalSeances) * 100).toFixed(1) : 0;
-      return { ...mod, injustifiees, justifiees, enAttente, total, taux, absences: modAbsences, modSessions, totalSeances };
+      
+      // Calculate rate based on a fixed 30h average per module for now
+      const taux = total > 0 ? +((total * 2 / 30) * 100).toFixed(1) : 0;
+      return { ...mod, injustifiees, justifiees, enAttente, total, taux, absences: modAbsences };
     })
-  }, [db.modules, db.seances, myAbsences, student.idFiliere, student.filiereId]);
+  }, [db.modules, db.seances, myAbsences, sfid]);
 
   const handleSubmitJustificatif = ({ absenceId, motif, fichier }) => {
-    const absence = db.absences.find(a => a.id === absenceId);
+    const absence = db.absences.find(a => (a.id || a.idAbsence) === absenceId);
     if (!absence) return;
-    // Postcondition: justificatif.statut = 'EN_ATTENTE' → notification enseignant
     save('absences', {
       ...absence,
       statut: 'EN_ATTENTE',
@@ -120,7 +123,7 @@ const Absences = () => {
     });
     setShowForm(false);
     setSelectedAbsence(null);
-    setToast({ type: 'success', msg: 'Justificatif soumis — Statut: EN_ATTENTE. L\'enseignant a été notifié.' });
+    setToast({ type: 'success', msg: 'Justificatif soumis. L\'enseignant a été notifié.' });
     setTimeout(() => setToast(null), 4000);
   };
 
@@ -131,113 +134,70 @@ const Absences = () => {
   });
 
   return (
-    <div>
+    <div className="animate-up">
       {toast && (
         <div style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', zIndex: 9999, background: '#fff', border: '1px solid var(--border)', borderLeft: `4px solid ${toast.type === 'success' ? 'var(--success)' : 'var(--danger)'}`, borderRadius: 'var(--radius)', padding: '.8rem 1rem', boxShadow: 'var(--shadow-lg)', maxWidth: '360px', fontSize: '.85rem' }}>
           {toast.msg}
         </div>
       )}
 
-      <div className="page-hero animate-up">
+      <div className="page-hero">
         <div className="page-hero-left">
           <h2 className="page-hero-title">Mes Absences</h2>
-          <p className="page-hero-sub">Suivi par module — CNE: {student.CNE} (filtre server-side, RG38)</p>
+          <p className="page-hero-sub">Suivi détaillé des présences par module</p>
         </div>
         <div className="page-hero-right">
           <span className="badge badge-gray">{myAbsences.length} absence(s) totale(s)</span>
         </div>
       </div>
 
-      {isReadOnly && (
-        <div style={{ background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.3)', borderRadius: 'var(--radius)', padding: '.85rem 1.25rem', marginBottom: '1.25rem', color: '#991b1b', fontSize: '.88rem', display: 'flex', alignItems: 'center', gap: '.4rem' }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-          </svg>
-          <span>Statut ABANDONNÉ — soumission de justificatif désactivée.</span>
-        </div>
-      )}
-
-      {/* Vue par module */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
         {myModules.map(mod => (
-          <div key={mod.id} className="page-card animate-up">
+          <div key={mod.id || mod.idModule} className="page-card">
             <div className="page-card-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '.75rem' }}>
-                <h3 className="page-card-title">{mod.intitule || mod.title}</h3>
-                <span style={{ fontSize: '.75rem', color: 'var(--text-3)' }}>{mod.code}</span>
+                <h3 className="page-card-title">{mod.intitule}</h3>
+                <span className="badge badge-refined" style={{ fontSize: '.65rem' }}>{mod.code}</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '.75rem' }}>
                 <span style={getTauxStyle(mod.taux)}>Taux: {mod.taux}%</span>
-                {mod.taux > 30 && <span className="badge badge-red" style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Seuil dépassé</span>}
-                {mod.taux > 15 && mod.taux <= 30 && <span className="badge badge-yellow" style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Attention</span>}
               </div>
             </div>
-            <div className="page-card-body" style={{ padding: '1rem 1.25rem' }}>
-              {/* Stats rapides */}
-              <div style={{ display: 'flex', gap: '1.5rem', marginBottom: mod.absences.length > 0 ? '1rem' : 0, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '.82rem' }}>
-                  <span style={{ fontWeight: 700, color: '#991b1b' }}>{mod.injustifiees}</span>
-                  <span style={{ color: 'var(--text-2)' }}> Injustifiée(s)</span>
-                </span>
-                <span style={{ fontSize: '.82rem' }}>
-                  <span style={{ fontWeight: 700, color: '#065f46' }}>{mod.justifiees}</span>
-                  <span style={{ color: 'var(--text-2)' }}> Justifiée(s)</span>
-                </span>
-                <span style={{ fontSize: '.82rem' }}>
-                  <span style={{ fontWeight: 700, color: '#92400e' }}>{mod.enAttente}</span>
-                  <span style={{ color: 'var(--text-2)' }}> En attente</span>
-                </span>
-                <span style={{ fontSize: '.82rem' }}>
-                  <span style={{ fontWeight: 700, color: 'var(--text)' }}>{mod.total}</span>
-                  <span style={{ color: 'var(--text-2)' }}> / {mod.totalSeances} séances</span>
-                </span>
+            <div className="page-card-body">
+              <div style={{ display: 'flex', gap: '1.5rem', marginBottom: mod.absences.length > 0 ? '1.5rem' : 0, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '.82rem' }}><strong style={{ color: '#991b1b' }}>{mod.injustifiees}</strong> Injustifiée(s)</span>
+                <span style={{ fontSize: '.82rem' }}><strong style={{ color: '#065f46' }}>{mod.justifiees}</strong> Justifiée(s)</span>
+                <span style={{ fontSize: '.82rem' }}><strong style={{ color: '#92400e' }}>{mod.enAttente}</strong> En attente</span>
               </div>
 
-              {/* Détail des absences du module */}
-              {mod.absences.length > 0 && (
+              {mod.absences.length > 0 ? (
                 <div className="table-wrap">
-                  <table>
+                  <table style={{ width: '100%' }}>
                     <thead>
                       <tr>
-                        <th>Date</th><th>Séance</th><th>Type</th><th>Statut</th><th>Justificatif</th><th>Action</th>
+                        <th>Date</th><th>Séance</th><th>Type</th><th>Statut</th><th>Justification</th><th>Action</th>
                       </tr>
                     </thead>
                     <tbody>
                       {mod.absences.map(abs => {
-                        const sess = db.seances.find(s => s.id === (abs.idSeance || abs.sessionId));
-                        const start = sess?.heureDebut || sess?.startSlot || '—';
-                        const end = sess?.heureFin || sess?.endSlot || '—';
+                        const sid = abs.idSeance || abs.sessionId;
+                        const sess = (db.seances || []).find(s => (s.id || s.idSeance) === sid);
                         return (
-                          <tr key={abs.id}>
-                            <td style={{ fontVariantNumeric: 'tabular-nums', fontSize: '.82rem' }}>{abs.dateSaisie || abs.date}</td>
-                            <td style={{ fontSize: '.82rem' }}>{sess ? `${start}–${end}` : '—'}</td>
-                            <td>{sess && <span className={`badge badge-${sess.type === 'Cours' ? 'blue' : sess.type === 'TD' ? 'green' : 'orange'}`}>{sess.type}</span>}</td>
+                          <tr key={abs.id || abs.idAbsence}>
+                            <td style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{new Date(abs.dateSaisie || abs.date).toLocaleDateString()}</td>
+                            <td style={{ fontSize: '.8rem' }}>{sess?.heureDebut} – {sess?.heureFin}</td>
+                            <td><span className={`badge badge-${sess?.type === 'TP' ? 'orange' : sess?.type === 'TD' ? 'green' : 'blue'}`}>{sess?.type || '—'}</span></td>
                             <td>
                               <span className={`badge ${abs.statut === 'INJUSTIFIEE' ? 'badge-red' : abs.statut === 'JUSTIFIEE' ? 'badge-green' : 'badge-yellow'}`}>
                                 {abs.statut}
                               </span>
                             </td>
-                            <td style={{ fontSize: '.8rem', color: 'var(--text-2)' }}>
-                              {abs.justificatif ? (
-                                <div>
-                                  <div>{abs.justificatif.motif}</div>
-                                  <span className={`badge ${abs.justificatif.statutJustif === 'VALIDEE' ? 'badge-green' : abs.justificatif.statutJustif === 'REJETEE' ? 'badge-red' : 'badge-yellow'}`} style={{ marginTop: '2px' }}>
-                                    {abs.justificatif.statutJustif}
-                                  </span>
-                                </div>
-                              ) : '—'}
+                            <td style={{ fontSize: '.8rem', color: 'var(--text-3)' }}>
+                              {abs.justificatif?.motif || '—'}
                             </td>
                             <td>
                               {abs.statut === 'INJUSTIFIEE' && !abs.justificatif && !isReadOnly && (
-                                <button
-                                  className="btn btn-ghost btn-sm"
-                                  onClick={() => { setSelectedAbsence(abs); setShowForm(true); }}
-                                >
-                                  Justifier
-                                </button>
-                              )}
-                              {abs.statut === 'INJUSTIFIEE' && !abs.justificatif && isReadOnly && (
-                                <span style={{ fontSize: '.75rem', color: 'var(--text-3)' }}>Lecture seule</span>
+                                <button className="btn btn-ghost btn-sm" onClick={() => { setSelectedAbsence(abs); setShowForm(true); }}>Justifier</button>
                               )}
                             </td>
                           </tr>
@@ -246,33 +206,22 @@ const Absences = () => {
                     </tbody>
                   </table>
                 </div>
-              )}
-              {mod.absences.length === 0 && (
-                <div style={{ color: 'var(--text-3)', fontSize: '.84rem', fontStyle: 'italic' }}>Aucune absence enregistrée pour ce module.</div>
+              ) : (
+                <p style={{ fontSize: '.85rem', color: 'var(--text-3)', fontStyle: 'italic' }}>Aucune absence pour ce module.</p>
               )}
             </div>
           </div>
         ))}
       </div>
 
-      {/* Modal justificatif */}
       {showForm && selectedAbsence && (
         <div className="modal-overlay" onClick={() => setShowForm(false)}>
           <div className="modal-box" onClick={e => e.stopPropagation()}>
             <div className="modal-hdr">
               <h3 className="modal-hdr-title">Soumettre un Justificatif</h3>
-              <button className="modal-close" onClick={() => setShowForm(false)}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              </button>
+              <button className="modal-close" onClick={() => setShowForm(false)}>✕</button>
             </div>
             <div className="modal-bdy">
-              <div style={{ background: 'var(--surface-2)', borderRadius: '8px', padding: '.75rem 1rem', marginBottom: '1rem', fontSize: '.84rem', color: 'var(--text-2)' }}>
-                <strong>Absence du:</strong> {selectedAbsence.date} · <strong>Statut:</strong> {selectedAbsence.statut}
-              </div>
-              <div style={{ background: '#fffbeb', border: '1px solid #fef3c7', borderRadius: '8px', padding: '.65rem 1rem', marginBottom: '1rem', fontSize: '.8rem', color: '#92400e', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                <span><strong>Règle:</strong> Un seul justificatif par absence. Aucun remplacement possible après soumission.</span>
-              </div>
               <JustificatifForm
                 absence={selectedAbsence}
                 onClose={() => setShowForm(false)}

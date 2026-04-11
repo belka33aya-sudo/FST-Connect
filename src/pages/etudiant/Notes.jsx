@@ -97,7 +97,7 @@ const ReclamationForm = ({ modules, onClose, onSubmit, reclamationsActives, isRe
         <div className="form-group" style={{ marginBottom: '1rem' }}>
           <label className="form-label">Note contestée (lecture seule)</label>
           <div style={{ background: 'var(--surface-2)', border: '1.5px solid var(--border)', borderRadius: 'var(--radius)', padding: '.65rem .85rem', fontSize: '.9rem', fontWeight: 700, color: 'var(--blue-dark)' }}>
-            {selectedModule.moy?.toFixed(2)} / 20 — {getStatutNote(selectedModule.moy || 0).label}
+            {parseFloat(selectedModule.moy || 0).toFixed(2)} / 20 — {getStatutNote(selectedModule.moy || 0).label}
           </div>
         </div>
       )}
@@ -266,10 +266,10 @@ const Notes = () => {
                       <td style={{ textAlign: 'center' }}>{mod.coeff}</td>
                       {mod.grade ? (
                         <>
-                          <td style={{ textAlign: 'center', fontWeight: 600 }}>{(mod.grade.valeurCC || mod.grade.cc).toFixed(1)}</td>
-                          <td style={{ textAlign: 'center', fontWeight: 600 }}>{(mod.grade.valeurEF || mod.grade.final).toFixed(1)}</td>
+                          <td style={{ textAlign: 'center', fontWeight: 600 }}>{parseFloat(mod.grade.valeurCC || mod.grade.cc || 0).toFixed(1)}</td>
+                          <td style={{ textAlign: 'center', fontWeight: 600 }}>{parseFloat(mod.grade.valeurEF || mod.grade.final || 0).toFixed(1)}</td>
                           <td style={{ textAlign: 'center', fontWeight: 800, fontSize: '1.05rem', color: 'var(--blue-dark)' }}>
-                            {mod.moy?.toFixed(2)}
+                            {parseFloat(mod.moy || 0).toFixed(2)}
                           </td>
                           <td>{statut && <span className={`badge ${statut.color}`}>{statut.label}</span>}</td>
                           <td>

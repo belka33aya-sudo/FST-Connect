@@ -18,9 +18,11 @@ const AdminAbsences = () => {
   // Group absences by student and calculate totals
   const studentStats = useMemo(() => {
     const stats = {};
-    db.absences.forEach(a => {
+    (db.absences || []).forEach(a => {
       const studentId = a.idEtudiant || a.studentId;
-      const isJustified = a.justifie !== undefined ? a.justifie : a.justified;
+      if (!studentId) return;
+
+      const isJustified = a.statut === 'JUSTIFIEE' || a.justifie === true || a.justified === true;
       
       if (!stats[studentId]) stats[studentId] = { total: 0, nonJustified: 0, list: [] };
       stats[studentId].total++;
@@ -31,15 +33,25 @@ const AdminAbsences = () => {
   }, [db.absences]);
 
   const filteredStudents = useMemo(() => {
-    return db.etudiants.filter(s => {
-      const stats = studentStats[s.id] || { total: 0 };
-      const matchesFiliere = !filiereFilter || (s.idFiliere || s.filiereId) === parseInt(filiereFilter);
-      const studentUser = db.utilisateurs.find(u => u.id === s.utilisateurId);
+    return (db.etudiants || []).filter(s => {
+      const sid = s.id || s.idEtudiant;
+      const stats = studentStats[sid] || { total: 0 };
+      
+      if (stats.total === 0) return false;
+
+      const matchesFiliere = !filiereFilter || String(s.idFiliere || s.filiereId) === String(filiereFilter);
+      
+      const studentUser = (db.utilisateurs || []).find(u => u.id === s.utilisateurId);
       const sName = studentUser ? `${studentUser.prenom} ${studentUser.nom}` : (s.nom || s.name || '');
       const matchesSearch = !searchTerm || sName.toLowerCase().includes(searchTerm.toLowerCase()) || 
                            (s.cne || '').toLowerCase().includes(searchTerm.toLowerCase());
-      return stats.total > 0 && matchesFiliere && matchesSearch;
-    }).sort((a,b) => (studentStats[b.id]?.total || 0) - (studentStats[a.id]?.total || 0));
+      
+      return matchesFiliere && matchesSearch;
+    }).sort((a,b) => {
+      const aid = a.id || a.idEtudiant;
+      const bid = b.id || b.idEtudiant;
+      return (studentStats[bid]?.total || 0) - (studentStats[aid]?.total || 0);
+    });
   }, [db.etudiants, db.utilisateurs, studentStats, filiereFilter, searchTerm]);
 
   // --- Handlers ---
@@ -51,7 +63,9 @@ const AdminAbsences = () => {
   };
 
   const handleSendWarning = (student) => {
-    info('Envoi d\'avertissement', `Un email officiel a été envoyé à ${student.name}.`);
+    const studentUser = (db.utilisateurs || []).find(u => u.id === student?.utilisateurId);
+    const name = studentUser ? `${studentUser.prenom} ${studentUser.nom}` : (student?.nom || student?.name || 'Étudiant');
+    info('Envoi d\'avertissement', `Un email officiel a été envoyé à ${name}.`);
     setTimeout(() => {
       success('Notification envoyée', 'L\'étudiant a reçu une alerte sur son tableau de bord.');
     }, 1000);
@@ -62,14 +76,23 @@ const AdminAbsences = () => {
     setShowPanel(true);
   };
 
-  const handleToggleJustification = (absence) => {
-    const updated = { ...absence, justified: !absence.justified, statut: !absence.justified ? 'JUSTIFIEE' : 'INJUSTIFIEE' };
-    save('absences', updated);
-    success(updated.justified ? 'Absence justifiée' : 'Justification retirée');
+  const handleToggleJustification = async (absence) => {
+    const isCurrentlyJustified = absence.statut === 'JUSTIFIEE' || absence.justifie === true || absence.justified === true;
+    const newStatut = isCurrentlyJustified ? 'INJUSTIFIEE' : 'JUSTIFIEE';
+    
+    const updated = { 
+      ...absence, 
+      statut: newStatut,
+      justifie: !isCurrentlyJustified,
+      justified: !isCurrentlyJustified 
+    };
+    
+    await save('absences', updated);
+    success(newStatut === 'JUSTIFIEE' ? 'Absence justifiée' : 'Justification retirée');
   };
 
   return (
-    <div className="page-area fade-in">
+    <div className="page-content">
       <div className="page-hero animate-up">
         <div className="page-hero-left">
           <h2 className="page-hero-title">Suivi de l'Assiduité</h2>
@@ -102,7 +125,7 @@ const AdminAbsences = () => {
 
          <select className="form-control" style={{ width: '180px' }} value={filiereFilter} onChange={e => setFiliereFilter(e.target.value)}>
            <option value="">Toutes les filières</option>
-           {db.filieres.map(f => <option key={f.id} value={f.id}>{f.code}</option>)}
+           {db.filieres.map(f => <option key={f.id || f.idFiliere} value={f.id || f.idFiliere}>{f.code}</option>)}
          </select>
       </div>
 
@@ -121,12 +144,13 @@ const AdminAbsences = () => {
             </thead>
             <tbody>
               {filteredStudents.map(s => {
-                const stats = studentStats[s.id] || { total: 0, nonJustified: 0 };
+                const sid = s.id || s.idEtudiant;
+                const stats = studentStats[sid] || { total: 0, nonJustified: 0 };
                 const riskLevel = stats.total >= 5 ? 'Critique' : stats.total >= 3 ? 'Alerte' : 'Normal';
                 return (
-                  <tr key={s.id} className="hover-row">
+                  <tr key={sid} className="hover-row">
                     <td style={{ padding: '15px 20px' }}>
-                      <div style={{ fontWeight: '700', color: 'var(--blue-dark)' }}>{studentName(s.id)}</div>
+                      <div style={{ fontWeight: '700', color: 'var(--blue-dark)' }}>{studentName(sid)}</div>
                       <div style={{ fontSize: '0.7rem', color: 'var(--text-3)' }}>{s.cne}</div>
                     </td>
                     <td><span className="badge badge-gray">{filiereName(s.idFiliere || s.filiereId)}</span></td>
@@ -155,7 +179,7 @@ const AdminAbsences = () => {
                 );
               })}
               {filteredStudents.length === 0 && (
-                <tr><td colSpan="6" className="table-empty">Aucun résultat trouvé pour ces critères.</td></tr>
+                <tr><td colSpan="6" className="table-empty">Aucune absence enregistrée.</td></tr>
               )}
             </tbody>
           </table>
@@ -168,7 +192,7 @@ const AdminAbsences = () => {
           <div className="side-panel-header">
             <div>
               <h3 className="side-panel-title">Détail des Absences</h3>
-              <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-3)' }}>{selectedStudent?.name}</p>
+              <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-3)' }}>{studentName(selectedStudent?.id || selectedStudent?.idEtudiant)}</p>
             </div>
             <button className="modal-close" onClick={() => setShowPanel(false)}><X size={20} /></button>
           </div>
@@ -177,15 +201,15 @@ const AdminAbsences = () => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                   <div style={{ padding: '16px', background: 'var(--bg)', borderRadius: '12px', border: '1px solid var(--border)' }}>
-                     <div style={{ fontSize: '0.7rem', fontWeight: '800', color: 'var(--text-3)', textTransform: 'uppercase', marginBottom: '4px' }}>Taux Global</div>
+                     <div style={{ fontSize: '0.7rem', fontWeight: '800', color: 'var(--text-3)', textTransform: 'uppercase', marginBottom: '4px' }}>Total Heures</div>
                      <div style={{ fontSize: '1.5rem', fontWeight: '900', color: 'var(--blue-dark)' }}>
-                        {((studentStats[selectedStudent.id]?.total / 20) * 100).toFixed(1)}%
+                        {(studentStats[selectedStudent.id || selectedStudent.idEtudiant]?.total * 2)}h
                      </div>
                   </div>
                   <div style={{ padding: '16px', background: 'var(--bg)', borderRadius: '12px', border: '1px solid var(--border)' }}>
                      <div style={{ fontSize: '0.7rem', fontWeight: '800', color: 'var(--text-3)', textTransform: 'uppercase', marginBottom: '4px' }}>Non Justifiées</div>
                      <div style={{ fontSize: '1.5rem', fontWeight: '900', color: 'var(--danger)' }}>
-                        {studentStats[selectedStudent.id]?.nonJustified}
+                        {studentStats[selectedStudent.id || selectedStudent.idEtudiant]?.nonJustified}
                      </div>
                   </div>
                 </div>
@@ -195,17 +219,17 @@ const AdminAbsences = () => {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {studentStats[selectedStudent.id]?.list.map((abs, idx) => {
+                  {studentStats[selectedStudent.id || selectedStudent.idEtudiant]?.list.map((abs, idx) => {
                     const sessionId = abs.idSeance || abs.sessionId;
-                    const session = db.seances.find(ses => ses.id === sessionId) || db.sessions.find(ses => ses.id === sessionId);
-                    const isAbsJustified = abs.justifie !== undefined ? abs.justifie : abs.justified;
+                    const session = (db.seances || []).find(ses => (ses.id || ses.idSeance) === sessionId);
+                    const isAbsJustified = abs.statut === 'JUSTIFIEE' || abs.justifie === true || abs.justified === true;
                     return (
                       <div key={idx} style={{ padding: '16px', borderRadius: '12px', background: 'white', border: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
                           <div style={{ fontWeight: '700', color: 'var(--blue-dark)', fontSize: '0.9rem' }}>{moduleName(session?.idModule || session?.moduleId)}</div>
                           <div style={{ display: 'flex', gap: '12px', marginTop: '4px', fontSize: '0.75rem', color: 'var(--text-3)' }}>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Calendar size={12} /> {abs.date}</span>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Clock size={12} /> {session?.heureDebut || session?.startSlot}</span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Calendar size={12} /> {new Date(abs.dateSaisie || abs.date).toLocaleDateString()}</span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Clock size={12} /> {session?.heureDebut || 'Session'}</span>
                           </div>
                         </div>
                         <div>
@@ -232,26 +256,11 @@ const AdminAbsences = () => {
           </div>
         </div>
       </div>
-
       <style>{`
-        .side-panel-overlay {
-          position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-          background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(4px);
-          z-index: 1000; opacity: 0; visibility: hidden; transition: all 0.3s ease;
-        }
+        .side-panel-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.3); backdrop-filter: blur(2px); z-index: 1000; opacity: 0; visibility: hidden; transition: 0.3s; }
         .side-panel-overlay.open { opacity: 1; visibility: visible; }
-        .side-panel {
-          position: absolute; right: 0; top: 0; height: 100%;
-          background: white; box-shadow: -10px 0 30px rgba(0,0,0,0.1);
-          display: flex; flex-direction: column;
-          transform: translateX(100%); transition: transform 0.3s ease;
-        }
+        .side-panel { position: absolute; right: 0; top: 0; height: 100%; background: white; box-shadow: -5px 0 15px rgba(0,0,0,0.1); transform: translateX(100%); transition: 0.3s; display: flex; flex-direction: column; }
         .side-panel-overlay.open .side-panel { transform: translateX(0); }
-        .side-panel-header { padding: 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
-        .side-panel-title { font-size: 1.25rem; font-weight: 800; color: var(--blue-dark); margin: 0; }
-        .side-panel-body { flex: 1; padding: 24px; overflow-y: auto; background: var(--bg-soft); }
-        .side-panel-footer { padding: 20px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 12px; }
-        .hover-row:hover { background: rgba(30,58,95,0.02); }
       `}</style>
     </div>
   );

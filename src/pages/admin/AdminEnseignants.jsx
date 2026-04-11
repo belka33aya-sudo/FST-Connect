@@ -90,7 +90,7 @@ const AdminEnseignants = () => {
   };
 
   return (
-    <div className="page-area fade-in">
+    <div className="page-content">
       <div className="page-hero animate-up">
         <div className="page-hero-left">
           <h2 className="page-hero-title">Corps Professoral</h2>

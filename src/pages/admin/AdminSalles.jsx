@@ -20,9 +20,11 @@ const AdminSalles = () => {
     statut: 'Disponible'
   });
 
-  const filteredRooms = db.rooms.filter(r => {
-    const matchesSearch = r.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesType = filterType === 'ALL' || r.type === filterType;
+  const filteredRooms = (db.salles || db.rooms || []).filter(r => {
+    const rName = r.nom || r.name || '';
+    const rType = r.typeSalle || r.type || '';
+    const matchesSearch = rName.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesType = filterType === 'ALL' || rType === filterType;
     return matchesSearch && matchesType;
   });
 
@@ -99,7 +101,7 @@ const AdminSalles = () => {
   };
 
   return (
-    <div className="page-area fade-in">
+    <div className="page-content">
       <div className="page-hero animate-up">
         <div className="page-hero-left">
           <h2 className="page-hero-title">Infrastructures & Salles</h2>
@@ -152,7 +154,7 @@ const AdminSalles = () => {
               </tr>
             </thead>
             <tbody>
-              {(db.salles || db.rooms || []).map(room => {
+              {filteredRooms.map(room => {
                 const status = room.statut || 'Disponible';
                 const rType = room.typeSalle || room.type;
                 const rCap = room.capacite || room.capacity;

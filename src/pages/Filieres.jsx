@@ -92,7 +92,7 @@ const Filieres = () => {
   };
 
   return (
-    <div className="page-area fade-in" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <div className="page-content" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       <div className="page-hero">
         <div className="page-hero-left">
           <h2 className="page-hero-title">Filières & Groupes</h2>

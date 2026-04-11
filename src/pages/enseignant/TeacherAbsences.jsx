@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useData } from '../../contexts/DataContext';
 import { useLocation, useNavigate } from 'react-router-dom';
+import api from '../../services/api';
 
 /* ── Constants ───────────────────────────────────────────── */
 const DAY_NAMES = ['', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
@@ -93,23 +94,24 @@ const TeacherAbsences = () => {
     setTimeout(() => setToast(null), 3500);
   }, []);
 
-  const teacher = useMemo(() => db.enseignants.find(t => t.utilisateurId === currentUser.id), [db.enseignants, currentUser.id]);
-  const teacherId = teacher?.id;
+  const teacher = useMemo(() => db.enseignants.find(t => t.utilisateurId == currentUser?.id), [db.enseignants, currentUser?.id]);
+  const teacherId = teacher?.idEnseignant || teacher?.id;
 
   /* ── Data derivations ── */
   const mySessions = useMemo(() =>
-    db.seances.filter(s => (s.idEnseignant === teacherId || s.teacherId === teacherId) && s.statut !== 'ANNULEE'),
+    db.seances.filter(s => (s.idEnseignant == teacherId || s.teacherId == teacherId) && s.statut !== 'ANNULEE'),
     [db.seances, teacherId]);
 
   const selectedSession = useMemo(() =>
-    db.seances.find(s => s.id === parseInt(selectedSessionId)),
+    db.seances.find(s => (s.id == selectedSessionId || s.idSeance == selectedSessionId)),
     [db.seances, selectedSessionId]);
 
   const studentsInGroup = useMemo(() => {
     if (!selectedSession) return [];
+    const groupId = selectedSession.idGroupe || selectedSession.groupId;
     return db.etudiants.filter(s =>
-      s.idGroupeTD === selectedSession.idGroupe || s.idGroupeTP === selectedSession.idGroupe ||
-      s.groupTDId === selectedSession.groupId || s.groupTPId === selectedSession.groupId
+      s.idGroupeTD == groupId || s.idGroupeTP == groupId ||
+      s.groupTDId == groupId || s.groupTPId == groupId
     );
   }, [db.etudiants, selectedSession]);
 
@@ -125,8 +127,9 @@ const TeacherAbsences = () => {
   /* Load pre-existing absences when session/date changes */
   useEffect(() => {
     if (selectedSession && selectedDate) {
+      const sessId = selectedSession.id || selectedSession.idSeance;
       const existing = db.absences.filter(
-        a => a.sessionId === selectedSession.id && a.date === selectedDate
+        a => (a.idSeance == sessId || a.sessionId == sessId)
       );
       setAbsentStudentIds(existing.map(a => a.idEtudiant || a.studentId));
       setSaved(existing.length > 0);
@@ -186,35 +189,24 @@ const TeacherAbsences = () => {
     setAbsentStudentIds(absent ? filteredStudents.map(s => s.id) : []);
   };
 
-  const handleSaveAbsences = () => {
+  const handleSaveAbsences = async () => {
     if (!selectedSession) return;
 
-    // Remove absences for present students
-    const existing = db.absences.filter(
-      a => (a.idSeance === selectedSession.id || a.sessionId === selectedSession.id) && (a.dateSaisie === selectedDate || a.date === selectedDate)
-    );
-    existing.forEach(a => {
-      if (!absentStudentIds.includes(a.idEtudiant || a.studentId)) remove('absences', a.id);
-    });
-
-    // Add new absences
-    absentStudentIds.forEach(studentId => {
-      const exists = existing.find(a => (a.idEtudiant === studentId || a.studentId === studentId));
-      if (!exists) {
-        save('absences', {
-          id: Date.now() + Math.random(),
-          idEtudiant: studentId,
+    try {
+      await api('/absences', {
+        method: 'POST',
+        body: JSON.stringify({
+          idEtudiants: absentStudentIds,
           idSeance: selectedSession.id,
-          dateSaisie: selectedDate,
-          date: selectedDate,
-          statut: 'INJUSTIFIEE',
-          justificatif: null,
-        });
-      }
-    });
+          typeSeance: selectedSession.type
+        })
+      });
 
-    setSaved(true);
-    showToast('success', `Feuille de présence enregistrée — ${absentStudentIds.length} absence(s) saisie(s).`);
+      setSaved(true);
+      showToast('success', `Feuille de présence enregistrée — ${absentStudentIds.length} absence(s) saisie(s).`);
+    } catch (error) {
+      showToast('error', error.message || 'Erreur lors de la sauvegarde des absences.');
+    }
   };
 
   const handleValidateJustif = (absence, decision) => {
@@ -312,13 +304,12 @@ const TeacherAbsences = () => {
                     >
                       <option value="">— Choisir une séance —</option>
                         {mySessions.map(s => {
-                          const tc = TYPE_COLORS[s.type] || TYPE_COLORS.Cours;
                           const start = s.heureDebut || s.startSlot || '—';
                           const end = s.heureFin || s.endSlot || '—';
-                          const sDay = s.jourNum || s.day;
+                          const dayLabel = s.jour || DAY_NAMES[s.jourNum || s.day] || '—';
                           return (
-                            <option key={s.id} value={s.id}>
-                              {DAY_NAMES[sDay]} · {start}–{end} · {moduleName(s.idModule || s.moduleId)} ({groupName(s.idGroupe || s.groupId)}) [{s.type}]
+                            <option key={s.id || s.idSeance} value={s.id || s.idSeance}>
+                              {dayLabel} · {start}–{end} · {moduleName(s.idModule || s.moduleId)} ({groupName(s.idGroupe || s.groupId)}) [{s.type}]
                             </option>
                           );
                         })}
@@ -684,7 +675,7 @@ const TeacherAbsences = () => {
                           </td>
                           <td>
                             <div style={{ fontWeight: 600, fontSize: '.85rem', color: 'var(--blue-dark)' }}>{moduleName(session?.idModule || session?.moduleId)}</div>
-                            <div style={{ fontSize: '.72rem', color: 'var(--text-3)' }}>{session ? `${DAY_NAMES[session.jourNum || session.day]} ${start}` : '—'}</div>
+                            <div style={{ fontSize: '.72rem', color: 'var(--text-3)' }}>{session ? `${session.jour || DAY_NAMES[session.jourNum || session.day] || '—'} ${start}` : '—'}</div>
                           </td>
                           <td style={{ fontSize: '.84rem', color: 'var(--text-2)', fontVariantNumeric: 'tabular-nums' }}>
                             {new Date(a.dateSaisie || a.date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}

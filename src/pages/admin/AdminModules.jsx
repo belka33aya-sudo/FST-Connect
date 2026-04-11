@@ -17,7 +17,10 @@ const AdminModules = () => {
   });
 
   const filteredModules = useMemo(() => {
-    return db.modules.filter(m => {
+    const modulesList = db.modules;
+    if (!Array.isArray(modulesList)) return [];
+    
+    return modulesList.filter(m => {
       const matchesFiliere = filiereFilter ? m.idFiliere === parseInt(filiereFilter) : true;
       const matchesSemestre = semestreFilter ? m.semestre === semestreFilter : true;
       return matchesFiliere && matchesSemestre;
@@ -73,7 +76,7 @@ const AdminModules = () => {
   };
 
   return (
-    <div className="page-area fade-in">
+    <div className="page-content">
       <div className="page-hero animate-up">
         <div className="page-hero-left">
           <h2 className="page-hero-title">Modules & Programme</h2>
@@ -94,7 +97,7 @@ const AdminModules = () => {
             onChange={(e) => setFiliereFilter(e.target.value)}
           >
             <option value="">Toutes les filières</option>
-            {db.filieres.map(f => <option key={f.id} value={f.id}>{f.code}</option>)}
+            {Array.isArray(db.filieres) && db.filieres.map(f => <option key={f.id} value={f.id}>{f.code || f.intitule}</option>)}
           </select>
         </div>
         <select 
@@ -123,7 +126,7 @@ const AdminModules = () => {
             </thead>
             <tbody>
               {filteredModules.map(m => (
-                <tr key={m.id}>
+                <tr key={m.id || m.idModule}>
                   <td style={{ padding: '15px 20px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                       <div style={{ padding: '6px', background: 'var(--surface-2)', borderRadius: '6px', color: 'var(--blue-mid)' }}>
@@ -147,11 +150,19 @@ const AdminModules = () => {
                   <td style={{ textAlign: 'right', padding: '15px 20px' }}>
                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
                         <button className="btn btn-ghost btn-sm" onClick={() => handleEdit(m)}><Edit size={16} /></button>
-                        <button className="btn btn-ghost btn-sm" onClick={() => handleDelete(m.id)}><Trash2 size={16} color="var(--danger)" /></button>
+                        <button className="btn btn-ghost btn-sm" onClick={() => handleDelete(m.id || m.idModule)}><Trash2 size={16} color="var(--danger)" /></button>
                      </div>
                   </td>
                 </tr>
               ))}
+              {filteredModules.length === 0 && (
+                <tr>
+                  <td colSpan="6" style={{ textAlign: 'center', padding: '40px', color: 'var(--text-3)' }}>
+                    <div style={{ opacity: 0.5, marginBottom: '8px' }}><BookOpen size={32} style={{ margin: 'auto' }} /></div>
+                    Aucun module trouvé.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -187,7 +198,7 @@ const AdminModules = () => {
                     <label className="form-label">Filière *</label>
                     <select className="form-control" value={formData.idFiliere} onChange={(e) => setFormData({...formData, idFiliere: e.target.value})} required>
                       <option value="">Choisir...</option>
-                      {db.filieres.map(f => <option key={f.id} value={f.id}>{f.code} - {f.nom || f.name || f.intitule}</option>)}
+                      {Array.isArray(db.filieres) && db.filieres.map(f => <option key={f.id || f.idFiliere} value={f.id || f.idFiliere}>{f.code} - {f.nom || f.name || f.intitule}</option>)}
                     </select>
                  </div>
                  <div className="form-group">
@@ -200,14 +211,15 @@ const AdminModules = () => {
 
                <div className="form-group">
                  <label className="form-label">Enseignant Coordonnateur</label>
-                 <select className="form-control" value={formData.idEnseignant} onChange={(e) => setFormData({...formData, idEnseignant: e.target.value})}>
+                  <select className="form-control" value={formData.idEnseignant} onChange={(e) => setFormData({...formData, idEnseignant: e.target.value})}>
                     <option value="">Non assigné</option>
-                    {(db.enseignants || db.teachers || []).map(t => {
-                        const user = db.utilisateurs?.find(u => u.id === t.utilisateurId) || t;
-                        const name = user.prenom ? `${user.prenom} ${user.nom}` : (user.name || user.nom);
-                        return <option key={t.id} value={t.id}>{name}</option>
+                    {Array.isArray(db.enseignants) && db.enseignants.map(t => {
+                        const user = Array.isArray(db.utilisateurs) ? db.utilisateurs.find(u => u.id === t.utilisateurId) : null;
+                        const teacherObj = user || t;
+                        const name = teacherObj.prenom ? `${teacherObj.prenom} ${teacherObj.nom}` : (teacherObj.name || teacherObj.nom || 'Professeur');
+                        return <option key={t.id || t.idEnseignant} value={t.id || t.idEnseignant}>{name}</option>
                     })}
-                 </select>
+                  </select>
                </div>
             </form>
           </div>

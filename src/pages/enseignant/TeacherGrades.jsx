@@ -1,28 +1,46 @@
 import React, { useState, useMemo } from 'react';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
+import api from '../../services/api';
 
 const TeacherGrades = () => {
-  const { db, save, nextId, gradeAvg } = useData();
+  const { db, save, nextId, gradeAvg, fetchSync } = useData();
   const { currentUser } = useAuth();
-  const teacher = useMemo(() => db.enseignants.find(t => t.utilisateurId === currentUser.id), [db.enseignants, currentUser.id]);
-  const teacherId = teacher?.id;
+  const teacher = useMemo(() => (db.enseignants || []).find(t => t.utilisateurId == currentUser.id), [db.enseignants, currentUser.id]);
+  const teacherId = teacher?.idEnseignant || teacher?.id;
 
   const [selectedModuleId, setSelectedModuleId] = useState('');
   const [editGrades, setEditGrades] = useState({});
 
-  const myModules = useMemo(() =>
-    db.modules.filter(m => (m.idEnseignant === teacherId || m.teacherId === teacherId)),
-  [db.modules, teacherId]);
+  const myModules = useMemo(() => {
+    if (!teacherId) return [];
+    
+    // Find modules where this teacher has an affectation
+    const moduleIds = (db.affectations || [])
+      .filter(a => (a.idEnseignant || a.teacherId) == teacherId)
+      .map(a => a.idModule || a.moduleId);
+      
+    return (db.modules || []).filter(m => 
+      moduleIds.some(id => id == (m.id || m.idModule)) || 
+      (m.idEnseignant || m.teacherId) == teacherId
+    );
+  }, [db.modules, db.affectations, teacherId]);
+
+  // Select first module by default once loaded
+  React.useEffect(() => {
+    if (!selectedModuleId && myModules.length > 0) {
+      setSelectedModuleId((myModules[0].id || myModules[0].idModule).toString());
+    }
+  }, [myModules, selectedModuleId]);
 
   const selectedModule = useMemo(() =>
-    selectedModuleId ? myModules.find(m => m.id === parseInt(selectedModuleId)) : null,
+    selectedModuleId ? myModules.find(m => (m.id || m.idModule) == selectedModuleId) : null,
   [myModules, selectedModuleId]);
 
   const studentsInModule = useMemo(() => {
     if (!selectedModule) return [];
     const filiereId = selectedModule.idFiliere || selectedModule.filiereId;
-    return filiereId ? db.etudiants.filter(s => (s.idFiliere === filiereId || s.filiereId === filiereId)) : db.etudiants;
+    return filiereId ? db.etudiants.filter(s => (s.idFiliere == filiereId || s.filiereId == filiereId)) : db.etudiants;
   }, [db.etudiants, selectedModule]);
 
   // Load initial grades from db to local state whenever module changes or db changes
@@ -32,12 +50,23 @@ const TeacherGrades = () => {
       return;
     }
     const initGrades = {};
+    const mid = selectedModule.id || selectedModule.idModule;
+    
     studentsInModule.forEach(student => {
-      const g = db.notes.find(x => (x.idEtudiant === student.id || x.studentId === student.id) && (x.idModule === selectedModule.id || x.moduleId === selectedModule.id));
+      const sid = student.id || student.idEtudiant;
+      const g = (db.notes || []).find(x => 
+        (x.idEtudiant == sid || x.studentId == sid) && 
+        (x.idModule == mid || x.moduleId == mid)
+      );
+      
       if (g) {
-        initGrades[student.id] = { cc: g.valeurCC ?? g.cc ?? '', final: g.valeurEF ?? g.final ?? '', publiee: g.publiee };
+        initGrades[sid] = { 
+          cc: g.valeurCC ?? g.cc ?? '', 
+          final: g.valeurEF ?? g.final ?? '', 
+          publiee: g.publiee 
+        };
       } else {
-        initGrades[student.id] = { cc: '', final: '', publiee: false };
+        initGrades[sid] = { cc: '', final: '', publiee: false };
       }
     });
     setEditGrades(initGrades);
@@ -57,7 +86,7 @@ const TeacherGrades = () => {
     }));
   };
 
-  const handleSaveStudent = (studentId, publish = false) => {
+  const handleSaveStudent = async (studentId, publish = false) => {
     if (!selectedModule) return;
     const gRow = db.notes.find(x => (x.idEtudiant === studentId || x.studentId === studentId) && (x.idModule === selectedModule.id || x.moduleId === selectedModule.id));
     const lg = editGrades[studentId];
@@ -66,40 +95,57 @@ const TeacherGrades = () => {
     const ccVal = lg.cc !== '' ? parseFloat(lg.cc) : null;
     const finalVal = lg.final !== '' ? parseFloat(lg.final) : null;
 
-    if (gRow) {
-      save('notes', {
-        ...gRow,
-        valeurCC: ccVal,
-        valeurEF: finalVal,
-        cc: ccVal, // Keep legacy for now too
-        final: finalVal, // Keep legacy for now too
-        publiee: publish || gRow.publiee,
-        edited: true,
-        datePublication: publish ? new Date().toISOString() : gRow.datePublication
+    try {
+      await api('/notes/bulk', {
+        method: 'POST',
+        body: JSON.stringify({
+          idModule: selectedModule.id,
+          notes: [{
+            idEtudiant: studentId,
+            idNote: gRow?.idNote || gRow?.id,
+            valeurCC: ccVal,
+            valeurEF: finalVal,
+            publiee: publish || gRow?.publiee
+          }]
+        })
       });
-    } else {
-      save('notes', {
-        id: nextId('notes'),
-        idEtudiant: studentId,
-        studentId: studentId,
-        idModule: selectedModule.id,
-        moduleId: selectedModule.id,
-        valeurCC: ccVal,
-        valeurEF: finalVal,
-        cc: ccVal,
-        final: finalVal,
-        publiee: publish,
-        edited: true,
-        datePublication: publish ? new Date().toISOString() : null
-      });
+      await fetchSync();
+      alert('Note enregistrée !');
+    } catch (error) {
+      console.error(error);
+      alert('Erreur lors de la sauvegarde');
     }
   };
 
-  const handlePublishAll = () => {
+  const handlePublishAll = async () => {
     if (!selectedModule) return;
-    studentsInModule.forEach(student => {
-      handleSaveStudent(student.id, true);
+    
+    const notesPayload = studentsInModule.map(student => {
+      const gRow = db.notes.find(x => (x.idEtudiant === student.id || x.studentId === student.id) && (x.idModule === selectedModule.id || x.moduleId === selectedModule.id));
+      const lg = editGrades[student.id];
+      return {
+        idEtudiant: student.id,
+        idNote: gRow?.idNote || gRow?.id,
+        valeurCC: lg.cc !== '' ? parseFloat(lg.cc) : null,
+        valeurEF: lg.final !== '' ? parseFloat(lg.final) : null,
+        publiee: true
+      };
     });
+
+    try {
+      await api('/notes/bulk', {
+        method: 'POST',
+        body: JSON.stringify({
+          idModule: selectedModule.id,
+          notes: notesPayload
+        })
+      });
+      await fetchSync();
+      alert('Toutes les notes ont été publiées !');
+    } catch (error) {
+      console.error(error);
+      alert('Erreur lors de la publication');
+    }
   };
 
   return (
@@ -158,32 +204,36 @@ const TeacherGrades = () => {
               </thead>
               <tbody>
                 {studentsInModule.length > 0 ? studentsInModule.map(student => {
-                  const sGrade = editGrades[student.id] || { cc: '', final: '', publiee: false };
-                  const gRecord = db.notes.find(x => (x.idEtudiant === student.id || x.studentId === student.id) && (x.idModule === selectedModule.id || x.moduleId === selectedModule.id));
+                  const sid = student.id || student.idEtudiant;
+                  const sGrade = editGrades[sid] || { cc: '', final: '', publiee: false };
+                  const gRecord = (db.notes || []).find(x => 
+                    (x.idEtudiant == sid || x.studentId == sid) && 
+                    (x.idModule == (selectedModule.id || selectedModule.idModule) || x.moduleId == (selectedModule.id || selectedModule.idModule))
+                  );
                   
                   // Compute average visually
                   const ccVal = parseFloat(sGrade.cc);
                   const finalVal = parseFloat(sGrade.final);
                   let avg = '—';
                   if (!isNaN(ccVal) && !isNaN(finalVal)) {
-                    avg = gradeAvg(ccVal, finalVal, selectedModule.coeffCC || 0.4, selectedModule.coeffEF || 0.6);
+                    avg = (ccVal * 0.4 + finalVal * 0.6).toFixed(2);
                   }
 
                   const isPublished = gRecord?.publiee;
-                  const u = db.utilisateurs.find(user => user.id === student.utilisateurId);
-                  const fullName = u ? `${u.prenom} ${u.nom}` : (student.name || '—');
+                  const u = (db.utilisateurs || []).find(user => user.id === student.utilisateurId);
+                  const fullName = u ? `${u.prenom} ${u.nom}` : (student.nom || student.name || '—');
 
                   return (
-                    <tr key={student.id}>
+                    <tr key={sid}>
                       <td style={{ fontWeight: 600, color: 'var(--blue-dark)' }}>{fullName}</td>
-                      <td>{student.CNE}</td>
+                      <td style={{ fontSize: '0.8rem', fontFamily: 'monospace' }}>{student.cne || student.CNE}</td>
                       <td>
                         <input
                           type="text"
                           className="form-control"
                           style={{ width: 80, height: 32, fontSize: '0.85rem' }}
                           value={sGrade.cc}
-                          onChange={(e) => handleGradeChange(student.id, 'cc', e.target.value)}
+                          onChange={(e) => handleGradeChange(sid, 'cc', e.target.value)}
                           disabled={isPublished}
                           placeholder=" /20"
                         />
@@ -194,7 +244,7 @@ const TeacherGrades = () => {
                           className="form-control"
                           style={{ width: 80, height: 32, fontSize: '0.85rem' }}
                           value={sGrade.final}
-                          onChange={(e) => handleGradeChange(student.id, 'final', e.target.value)}
+                          onChange={(e) => handleGradeChange(sid, 'final', e.target.value)}
                           disabled={isPublished}
                           placeholder=" /20"
                         />
@@ -214,10 +264,10 @@ const TeacherGrades = () => {
                       <td style={{ textAlign: 'right' }}>
                         {!isPublished && (
                           <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                            <button className="btn btn-ghost btn-sm" onClick={() => handleSaveStudent(student.id, false)}>
+                            <button className="btn btn-ghost btn-sm" onClick={() => handleSaveStudent(sid, false)}>
                               Sauvegarder
                             </button>
-                            <button className="btn btn-outline-blue btn-sm" onClick={() => handleSaveStudent(student.id, true)}>
+                            <button className="btn btn-outline-blue btn-sm" onClick={() => handleSaveStudent(sid, true)}>
                               Publier
                             </button>
                           </div>

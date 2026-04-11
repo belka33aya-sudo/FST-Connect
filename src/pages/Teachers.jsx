@@ -52,7 +52,7 @@ const Teachers = () => {
   };
 
   return (
-    <div className="page-area fade-in">
+    <div className="page-content">
       <div className="page-hero">
         <h2 className="page-hero-title">Gestion des Enseignants</h2>
         <button className="btn btn-primary" onClick={handleOpenAdd}>

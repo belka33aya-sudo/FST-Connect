@@ -18,40 +18,67 @@ const TeacherModules = () => {
     file: null
   });
 
-  const teacher = useMemo(() => db.enseignants.find(t => t.utilisateurId === currentUser.id), [db.enseignants, currentUser.id]);
-  const teacherId = teacher?.id;
-  const myModules = useMemo(() => db.modules.filter(m => (m.idEnseignant === teacherId || m.teacherId === teacherId)), [db.modules, teacherId]);
+  const teacher = useMemo(() => {
+    if (!db.enseignants || !Array.isArray(db.enseignants)) return null;
+    return db.enseignants.find(t => t.utilisateurId == currentUser?.id);
+  }, [db.enseignants, currentUser?.id]);
 
-  // Select first module by default
-  useState(() => {
-    if (myModules.length > 0) setSelectedModuleId(myModules[0].id);
-  });
+  const teacherId = teacher?.idEnseignant || teacher?.id;
 
-  const selectedModule = useMemo(() => db.modules.find(m => m.id === selectedModuleId), [selectedModuleId, db.modules]);
-  const moduleDocs = useMemo(() => db.documents.filter(d => (d.idModule === selectedModuleId || d.moduleId === selectedModuleId)), [db.documents, selectedModuleId]);
+  const myModules = useMemo(() => {
+    if (!db.modules || !Array.isArray(db.modules)) return [];
+    const affectedModuleIds = new Set(db.affectations?.filter(a => (a.idEnseignant || a.teacherId) == teacherId).map(a => a.idModule || a.moduleId) || []);
+    return db.modules.filter(m => {
+      const isAssigned = (m.idEnseignant || m.teacherId) == teacherId || affectedModuleIds.has(m.id || m.idModule);
+      return isAssigned;
+    });
+  }, [db.modules, db.affectations, teacherId]);
 
+  // Select first module by default once loaded
+  React.useEffect(() => {
+    if (!selectedModuleId && myModules.length > 0) {
+      setSelectedModuleId(myModules[0].id);
+    }
+  }, [myModules, selectedModuleId]);
+
+  const selectedModule = useMemo(() => {
+    if (!db.modules || !Array.isArray(db.modules)) return null;
+    return db.modules.find(m => m.id === selectedModuleId);
+  }, [selectedModuleId, db.modules]);
+
+  const moduleDocs = useMemo(() => {
+    if (!db.documents || !Array.isArray(db.documents)) return [];
+    return db.documents.filter(d => (d.idModule == selectedModuleId || d.moduleId == selectedModuleId));
+  }, [db.documents, selectedModuleId]);
+
+  // Tab labels vs stored type: 'Ressources' (plural) -> matches type 'Ressource' (singular)
   const filteredDocs = useMemo(() => {
-    return moduleDocs.filter(d => d.type === activeTab);
+    const typeKey = activeTab === 'Ressources' ? 'Ressource' : 'Devoir';
+    return moduleDocs.filter(d => d.type === typeKey || d.type === activeTab);
   }, [moduleDocs, activeTab]);
 
   const handleImport = (e) => {
     e.preventDefault();
+    const fileName = newDoc.file ? newDoc.file.name : 'document.pdf';
+    const docType = newDoc.type; // 'Ressource' or 'Devoir'
     const doc = {
       id: Date.now(),
+      idDocument: Date.now(),
       idModule: selectedModuleId,
       moduleId: selectedModuleId,
       titre: newDoc.title,
       title: newDoc.title,
-      type: newDoc.type,
-      fichier: newDoc.file ? newDoc.file.name : 'document.pdf',
-      filename: newDoc.file ? newDoc.file.name : 'document.pdf',
+      type: docType,
+      cheminFichier: fileName,
+      fichier: fileName,
+      filename: fileName,
+      dateUpload: new Date().toISOString(),
       datePublication: new Date().toISOString().split('T')[0],
       uploadedAt: new Date().toISOString().split('T')[0],
-      idEnseignant: teacherId,
-      teacherId: teacherId,
+      idAuteur: currentUser?.id,
       nombreTelechargements: 0,
       downloadCount: 0,
-      ...(newDoc.type === 'Devoir' && {
+      ...(docType === 'Devoir' && {
         dateLimite: newDoc.deadline,
         deadline: newDoc.deadline,
         description: newDoc.instructions,
@@ -63,6 +90,8 @@ const TeacherModules = () => {
     save('documents', doc);
     setShowModal(false);
     setNewDoc({ title: '', type: 'Ressource', deadline: '', instructions: '', file: null });
+    // Auto-switch to the matching tab so the user sees the new document
+    setActiveTab(docType === 'Devoir' ? 'Devoirs' : 'Ressources');
   };
 
   const handleDelete = (id) => {
@@ -79,12 +108,12 @@ const TeacherModules = () => {
           <h3 style={{ fontSize: '0.85rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Mes Modules</h3>
         </div>
         <div>
-          {myModules.map(m => {
-            const count = db.documents.filter(d => (d.idModule === m.id || d.moduleId === m.id)).length;
+          {Array.isArray(myModules) && myModules.map(m => {
+            const count = Array.isArray(db.documents) ? db.documents.filter(d => (d.idModule === m.id || d.moduleId === m.id)).length : 0;
             const isSelected = selectedModuleId === m.id;
             return (
               <div
-                key={m.id}
+                key={m.id || Math.random()}
                 onClick={() => setSelectedModuleId(m.id)}
                 style={{
                   padding: '1.25rem 1.5rem',
@@ -95,7 +124,7 @@ const TeacherModules = () => {
                   transition: 'all 0.2s'
                 }}
               >
-                <div style={{ fontWeight: isSelected ? 800 : 600, fontSize: '0.9rem', color: isSelected ? '#1e3a5f' : '#334155', marginBottom: '0.5rem' }}>{m.intitule || m.title}</div>
+                <div style={{ fontWeight: isSelected ? 800 : 600, fontSize: '0.9rem', color: isSelected ? '#1e3a5f' : '#334155', marginBottom: '0.5rem' }}>{m.intitule || m.title || 'Sans titre'}</div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span className="badge badge-refined" style={{ background: '#e2e8f0', color: '#475569', fontSize: '0.65rem' }}>{filiereName(m.idFiliere || m.filiereId)}</span>
                   <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{count} doc(s)</span>
@@ -113,8 +142,8 @@ const TeacherModules = () => {
             {/* Header */}
             <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#1e3a5f' }}>{selectedModule.intitule || selectedModule.title}</h2>
-                <p style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '2px' }}>Code: {selectedModule.code} · Semestre {selectedModule.semestre || selectedModule.semester}</p>
+                <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#1e3a5f' }}>{selectedModule?.intitule || selectedModule?.title || 'Chargement...'}</h2>
+                <p style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '2px' }}>Code: {selectedModule?.code} · Semestre {selectedModule?.semestre || selectedModule?.semester}</p>
               </div>
               <button className="btn btn-primary" onClick={() => setShowModal(true)}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginRight: '8px' }}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>

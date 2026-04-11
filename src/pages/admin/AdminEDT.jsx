@@ -57,13 +57,27 @@ const AdminEDT = () => {
   ];
 
   const getSessionForSlot = (dayId, slotStart) => {
+    const dayLabels = { 1: 'Lundi', 2: 'Mardi', 3: 'Mercredi', 4: 'Jeudi', 5: 'Vendredi', 6: 'Samedi' };
+    const targetDay = dayLabels[dayId];
+
     return db.seances.find(s => {
-      if ((s.day || s.jourNum) !== dayId) return false;
-      if (filiereFilter && (s.idFiliere || s.filiereId) !== parseInt(filiereFilter)) {
-         const group = db.groupes.find(g => g.id === (s.idGroupe || s.groupId));
-         if ((group?.idFiliere || group?.filiereId) !== parseInt(filiereFilter)) return false;
+      // Check day - support both number and string from DB
+      const sDay = s.jour || s.day || s.jourNum;
+      if (sDay !== targetDay && sDay !== dayId) return false;
+
+      if (filiereFilter) {
+         const fid = parseInt(filiereFilter);
+         const sFid = s.idFiliere || s.filiereId;
+         if (sFid && sFid !== fid) return false;
+         
+         // If session has no direct filiereId, check its group
+         if (!sFid) {
+           const group = db.groupes.find(g => (g.id || g.idGroupe) === (s.idGroupe || s.groupId));
+           if (!group || (group.idFiliere || group.filiereId) !== fid) return false;
+         }
       }
-      const sStartString = s.startSlot || s.heureDebut || '00:00';
+      
+      const sStartString = s.heureDebut || s.startSlot || '00:00';
       const sStart = parseInt(sStartString.split(':')[0]);
       const slotStartHour = parseInt(slotStart.split(':')[0]);
       return Math.abs(sStart - slotStartHour) <= 1;
@@ -160,7 +174,7 @@ const AdminEDT = () => {
   };
 
   return (
-    <div className="page-area fade-in">
+    <div className="page-content">
       {/* Header Section */}
       <div className="page-hero animate-up">
         <div className="page-hero-left">
@@ -492,32 +506,6 @@ const AdminEDT = () => {
       </div>
 
       <style>{`
-        /* Previous styles included ... */
-        .side-panel-overlay {
-          position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-          background: rgba(15, 23, 42, 0.4);
-          backdrop-filter: blur(4px);
-          z-index: 1000;
-          opacity: 0; visibility: hidden;
-          transition: all 0.3s ease;
-        }
-        .side-panel-overlay.open { opacity: 1; visibility: visible; }
-        .side-panel {
-          position: absolute; right: 0; top: 0; height: 100%;
-          width: 450px; background: white;
-          box-shadow: -10px 0 30px rgba(0,0,0,0.1);
-          display: flex; flexDirection: column;
-          transform: translateX(100%); transition: transform 0.3s ease;
-        }
-        .side-panel-overlay.open .side-panel { transform: translateX(0); }
-        .side-panel-header { padding: 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
-        .side-panel-title { font-size: 1.25rem; font-weight: 800; color: var(--blue-dark); margin: 0; }
-        .side-panel-body { flex: 1; padding: 24px; overflow-y: auto; }
-        .side-panel-footer { padding: 20px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 12px; }
-        .modal-close { background: none; border: none; color: var(--text-3); cursor: pointer; padding: 4px; border-radius: 6px; transition: all 0.2s; }
-        .modal-close:hover { background: var(--bg); color: var(--danger); }
-
-        /* Doc and Planning styles from previous turn ... */
         .doc-card { background: white; border-radius: 16px; border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.03); transition: all 0.3s ease; display: flex; flexDirection: column; overflow: hidden; }
         .doc-card:hover { transform: translateY(-5px); box-shadow: 0 12px 24px rgba(30,58,95,0.1); border-color: var(--blue-mid); }
         .doc-card-body { padding: 24px; flex: 1; }

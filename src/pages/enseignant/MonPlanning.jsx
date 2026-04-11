@@ -19,11 +19,11 @@ const MonPlanning = () => {
   const [absentIds, setAbsentIds] = useState([]);
   const [toast, setToast] = useState(null);
 
-  const teacher = useMemo(() => db.enseignants.find(t => t.utilisateurId === currentUser.id), [db.enseignants, currentUser.id]);
-  const teacherId = teacher?.id;
+  const teacher = useMemo(() => db.enseignants.find(t => t.utilisateurId == currentUser?.id), [db.enseignants, currentUser?.id]);
+  const teacherId = teacher?.idEnseignant || teacher?.id;
 
   const mySessions = useMemo(() => {
-    return db.seances.filter(s => (s.idEnseignant === teacherId || s.teacherId === teacherId));
+    return db.seances.filter(s => s.idEnseignant == teacherId || s.teacherId == teacherId);
   }, [db.seances, teacherId]);
 
   const getWeekRange = (offset) => {
@@ -39,7 +39,7 @@ const MonPlanning = () => {
   const weekLabel = weekOffset === 0 ? 'Semaine en cours' : weekOffset === -1 ? 'Semaine précédente' : 'Semaine suivante';
   const rangeText = `${monday.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })} – ${saturday.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}`;
 
-  const getSession = (day, slot) => mySessions.find(s => (s.jourNum === day || s.day === day) && (s.heureDebut === slot || s.startSlot === slot));
+  const getSession = (dayLabel, slot) => mySessions.find(s => s.jour === dayLabel && (s.heureDebut === slot || s.startSlot === slot));
 
   // ── Handlers ──
   const openAppel = (session) => {
@@ -155,8 +155,8 @@ const MonPlanning = () => {
               {TIME_SLOTS.map((slot) => (
                 <tr key={slot}>
                   <td className="planning-time-cell">{slot}</td>
-                  {DAYS_LABELS.map((_, di) => {
-                    const sess = getSession(di + 1, slot);
+                  {DAYS_LABELS.map((dayLabel, di) => {
+                    const sess = getSession(dayLabel, slot);
                     if (!sess) return <td key={di} className="planning-slot" />;
                     
                     const isAnnulee = sess.statut === 'ANNULEE';
@@ -212,11 +212,11 @@ const MonPlanning = () => {
                 </tr>
               </thead>
               <tbody>
-                {[...mySessions].sort((a, b) => (a.jourNum || a.day) - (b.jourNum || b.day) || (a.heureDebut || a.startSlot).localeCompare(b.heureDebut || b.startSlot)).map(s => {
+                {[...mySessions].sort((a, b) => DAYS_LABELS.indexOf(a.jour) - DAYS_LABELS.indexOf(b.jour) || (a.heureDebut || '').localeCompare(b.heureDebut || '')).map(s => {
                   const isAnnulee = s.statut === 'ANNULEE';
                   return (
                     <tr key={s.id} style={{ opacity: isAnnulee ? 0.5 : 1 }}>
-                      <td style={{ fontWeight: 700, color: 'var(--blue-dark)' }}>{DAYS_LABELS[(s.jourNum || s.day) - 1]}</td>
+                      <td style={{ fontWeight: 700, color: 'var(--blue-dark)' }}>{s.jour}</td>
                       <td style={{ fontWeight: 600, color: '#475569' }}>{s.heureDebut || s.startSlot} – {s.heureFin || s.endSlot}</td>
                       <td>
                         <div style={{ fontWeight: 700, color: '#1e293b' }}>{moduleName(s.idModule || s.moduleId)}</div>

@@ -151,7 +151,7 @@ const AdminEtudiants = () => {
   };
 
   return (
-    <div className="page-area fade-in">
+    <>
       <div className="page-hero animate-up">
         <div className="page-hero-left">
           <h2 className="page-hero-title">Registre National des Étudiants</h2>
@@ -282,7 +282,7 @@ const AdminEtudiants = () => {
             </thead>
             <tbody>
               {filteredStudents.map(student => {
-                const initials = student.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+                const initials = (student.name || '').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
                 return (
                   <tr key={student.id}>
                     <td style={{ padding: '15px 20px' }}>
@@ -419,7 +419,7 @@ const AdminEtudiants = () => {
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 };
 
