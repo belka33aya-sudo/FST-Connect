@@ -55,38 +55,29 @@ const AdminEnseignants = () => {
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     
-    const userId = editingTeacher?.utilisateurId || nextId('utilisateurs');
-    const teacherId = editingTeacher ? editingTeacher.id : nextId('enseignants');
-
-    const userData = {
-      id: userId,
-      nom: formData.nom,
-      prenom: formData.prenom,
-      email: formData.email,
-      role: 'teacher',
-      statut: 'ACTIF'
-    };
-
-    const teacherData = {
-      id: teacherId,
-      idEnseignant: teacherId,
-      utilisateurId: userId,
-      matricule: formData.matricule,
-      grade: formData.grade,
-      type: formData.type,
-      specialite: formData.specialite,
+    // For new teachers, we send everything to the transactional endpoint
+    const teacherPayload = {
+      ...formData,
       volumeHoraireBase: parseInt(formData.volumeHoraireBase || 12),
       statut: 'ACTIF'
     };
 
-    save('utilisateurs', userData);
-    save('enseignants', teacherData);
+    if (editingTeacher) {
+      teacherPayload.id = editingTeacher.id;
+      teacherPayload.idEnseignant = editingTeacher.idEnseignant || editingTeacher.id;
+      teacherPayload.utilisateurId = editingTeacher.utilisateurId;
+    }
 
-    success(editingTeacher ? 'Mis à jour' : 'Ajouté', 'Les informations de l\'enseignant ont été enregistrées.');
-    setShowPanel(false);
+    try {
+      await save('enseignants', teacherPayload);
+      success(editingTeacher ? 'Mis à jour' : 'Ajouté', 'Les informations de l\'enseignant ont été enregistrées.');
+      setShowPanel(false);
+    } catch (err) {
+      error('Erreur', err.message || 'Impossible d\'enregistrer l\'enseignant.');
+    }
   };
 
   return (

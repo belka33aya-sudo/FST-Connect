@@ -29,7 +29,8 @@ const ModulesManager = () => {
     e.preventDefault();
     const data = { 
       ...formData, 
-      id: editingModule ? editingModule.id : nextId('modules'),
+      // Only include ID if we're editing
+      ...(editingModule && { id: editingModule.id, idModule: editingModule.idModule }),
       filiereId: parseInt(formData.filiereId),
       teacherId: formData.teacherId ? parseInt(formData.teacherId) : null
     };

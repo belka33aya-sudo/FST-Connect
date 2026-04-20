@@ -130,7 +130,42 @@ const getMyAbsences = async (req, res) => {
   }
 };
 
+/**
+ * @desc    Update absence status / justificatif decision (Teacher/Admin only)
+ * @route   PATCH /api/absences/:id
+ * @access  Private/Teacher/Admin
+ */
+const updateAbsence = async (req, res) => {
+  const { id } = req.params;
+  const { statut, justificatifStatut } = req.body;
+
+  try {
+    // 1. Update the absence record's statut
+    const updatedAbsence = await prisma.absence.update({
+      where: { idAbsence: parseInt(id) },
+      data: { statut }
+    });
+
+    // 2. If a justificatif decision was provided, update its statut as well
+    if (justificatifStatut) {
+      await prisma.justificatif.updateMany({
+        where: { idAbsence: parseInt(id) },
+        data: { statutJustif: justificatifStatut }
+      });
+    }
+
+    res.json({
+      status: 'success',
+      data: updatedAbsence
+    });
+  } catch (error) {
+    console.error('updateAbsence error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = {
   recordAbsence,
-  getMyAbsences
+  getMyAbsences,
+  updateAbsence
 };

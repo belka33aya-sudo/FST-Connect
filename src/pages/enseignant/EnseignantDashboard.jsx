@@ -62,7 +62,7 @@ const EnseignantDashboard = () => {
   const myModules = useMemo(() => {
     const affectedModuleIds = new Set(db.affectations?.filter(a => (a.idEnseignant || a.teacherId) == teacherId).map(a => a.idModule || a.moduleId) || []);
     return db.modules.filter(m => {
-      const isAssigned = (m.idEnseignant || m.teacherId) == teacherId || affectedModuleIds.has(m.id || m.idModule);
+      const isAssigned = (m.idResponsable || m.idEnseignant || m.teacherId) == teacherId || affectedModuleIds.has(m.id || m.idModule);
       return isAssigned;
     });
   }, [db.modules, db.affectations, teacherId]);
@@ -84,9 +84,14 @@ const EnseignantDashboard = () => {
     [mySessions]);
 
   const pendingAbsences = useMemo(() => {
-    const mySessionIds = new Set(mySessions.map(s => s.id));
+    // Bug #6 fix: build the set from BOTH s.idSeance (real DB PK) and s.id (normalized alias)
+    // so the cross-reference against a.idSeance on absence records is always reliable.
+    const mySessionIds = new Set(
+      mySessions.flatMap(s => [s.idSeance, s.id].filter(Boolean))
+    );
     return db.absences.filter(a =>
-      mySessionIds.has(a.idSeance || a.sessionId) && a.statut === 'INJUSTIFIEE'
+      (mySessionIds.has(a.idSeance) || mySessionIds.has(a.sessionId)) &&
+      a.statut === 'INJUSTIFIEE'
     );
   }, [db.absences, mySessions]);
 
@@ -111,10 +116,12 @@ const EnseignantDashboard = () => {
           </div>
         </div>
         <div className="ens-hero-actions">
-          <button className="btn btn-primary" onClick={() => navigate('/absences')}>
+          <button className="btn btn-primary" onClick={() => navigate('/teacher/absences')}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight:8}}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="17" y1="8" x2="23" y2="8"/><line x1="17" y1="12" x2="23" y2="12"/></svg>
             Saisir absences
           </button>
-          <button className="btn btn-ghost" onClick={() => navigate('/grades')}>
+          <button className="btn btn-ghost" onClick={() => navigate('/teacher/notes')}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight:8}}><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
             Publier notes
           </button>
         </div>
@@ -237,6 +244,40 @@ const EnseignantDashboard = () => {
           </div>
         </div>
       </div>
+      <style>{`
+        .ens-sessions-list { display: flex; flex-direction: column; }
+        .ens-session-row { display: flex; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border); gap: 16px; transition: all 0.2s; }
+        .ens-session-row:hover { background: var(--surface-2); }
+        .ens-today { border-left: 4px solid var(--blue-mid); background: #f0f7ff; }
+        .ens-cancelled { opacity: 0.6; filter: grayscale(1); }
+        .ens-session-time { display: flex; flex-direction: column; width: 60px; font-weight: 700; color: var(--blue-mid); font-size: 0.85rem; line-height: 1.2; }
+        .ens-time-sep { font-size: 0.7rem; opacity: 0.5; margin: 2px 0; }
+        .ens-session-type-pill { padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; min-width: 65px; text-align: center; }
+        .ens-session-info { flex: 1; }
+        .ens-session-module { font-size: 0.95rem; font-weight: 700; color: var(--blue-dark); margin-bottom: 4px; }
+        .ens-session-meta { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: var(--text-3); font-weight: 600; }
+        
+        .ens-module-item { display: flex; padding: 16px 20px; border-bottom: 1px solid var(--border); gap: 16px; align-items: center; transition: all 0.2s; cursor: pointer; }
+        .ens-module-item:hover { background: var(--surface-2); }
+        .ens-module-code { width: 44px; height: 44px; background: var(--blue-mid); color: white; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 800; text-align: center; line-height: 1.1; padding: 4px; }
+        .ens-module-body { flex: 1; }
+        .ens-module-title { font-weight: 700; color: var(--blue-dark); font-size: 0.9rem; margin-bottom: 4px; }
+        .ens-module-meta { display: flex; align-items: center; gap: 12px; }
+        
+        .ens-absence-item { display: flex; align-items: center; padding: 12px 20px; border-bottom: 1px solid var(--border); gap: 12px; }
+        .ens-absence-avatar { width: 32px; height: 32px; background: #fee2e2; color: #991b1b; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.85rem; }
+        .ens-absence-info { flex: 1; }
+        .ens-absence-name { font-weight: 700; font-size: 0.85rem; color: var(--blue-dark); }
+        .ens-absence-meta { font-size: 0.75rem; color: var(--text-3); font-weight: 500; }
+        
+        .ens-annonce-row { padding: 14px 20px; border-bottom: 1px solid var(--border); cursor: pointer; transition: all 0.2s; }
+        .ens-annonce-row:hover { background: var(--surface-1); }
+        .ens-urgent { border-left: 3px solid var(--danger); }
+        .ens-annonce-title { font-weight: 700; font-size: 0.85rem; color: var(--blue-dark); margin-bottom: 2px; }
+        .ens-annonce-date { font-size: 0.7rem; color: var(--text-3); }
+
+        .ens-day-divider { padding: 8px 20px; background: var(--surface-2); font-size: 0.7rem; font-weight: 800; text-transform: uppercase; color: var(--text-3); letter-spacing: 1px; border-bottom: 1px solid var(--border); }
+      `}</style>
     </div>
   );
 };

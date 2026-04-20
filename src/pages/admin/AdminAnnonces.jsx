@@ -39,29 +39,31 @@ const AdminAnnonces = () => {
       success('Annonce supprimée');
     }
   };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    const data = {
-      ...formData,
-      id: editingAnnouncement ? (editingAnnouncement.id || editingAnnouncement.idAnnonce) : nextId('annonces'),
-      idAnnonce: editingAnnouncement ? (editingAnnouncement.idAnnonce || editingAnnouncement.id) : undefined,
-      titre: formData.titre || formData.title,
-      contenu: formData.contenu || formData.content,
-      cible: formData.cible || formData.target,
-      urgente: formData.urgente !== undefined ? formData.urgente : formData.urgent,
-      datePublication: formData.datePublication || formData.date,
-      // Legacy keep
-      title: formData.titre || formData.title,
-      content: formData.contenu || formData.content,
-      target: formData.cible || formData.target,
-      urgent: formData.urgente !== undefined ? formData.urgente : formData.urgent,
-      date: formData.datePublication || formData.date
-    };
-    await save('annonces', data);
-    setShowPanel(false);
-    success(editingAnnouncement ? 'Mise à jour' : 'Publiée', 'L\'annonce est visible sur les tableaux de bord.');
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  const data = {
+    ...formData,
+    // Only include IDs if we're editing
+    ...(editingAnnouncement && { 
+      id: editingAnnouncement.id || editingAnnouncement.idAnnonce,
+      idAnnonce: editingAnnouncement.idAnnonce || editingAnnouncement.id
+    }),
+    titre: formData.titre || formData.title,
+    contenu: formData.contenu || formData.content,
+    cible: formData.cible || formData.target,
+    urgente: formData.urgente !== undefined ? formData.urgente : formData.urgent,
+    datePublication: formData.datePublication || formData.date,
+    // Legacy keep
+    title: formData.titre || formData.title,
+    content: formData.contenu || formData.content,
+    target: formData.cible || formData.target,
+    urgent: formData.urgente !== undefined ? formData.urgente : formData.urgent,
+    date: formData.datePublication || formData.date
   };
+  await save('annonces', data);
+  setShowPanel(false);
+  success(editingAnnouncement ? 'Mise à jour' : 'Publiée', 'L\'annonce est visible sur les tableaux de bord.');
+};
 
   return (
     <>

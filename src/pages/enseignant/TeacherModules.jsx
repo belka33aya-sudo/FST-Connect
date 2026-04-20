@@ -29,7 +29,9 @@ const TeacherModules = () => {
     if (!db.modules || !Array.isArray(db.modules)) return [];
     const affectedModuleIds = new Set(db.affectations?.filter(a => (a.idEnseignant || a.teacherId) == teacherId).map(a => a.idModule || a.moduleId) || []);
     return db.modules.filter(m => {
-      const isAssigned = (m.idEnseignant || m.teacherId) == teacherId || affectedModuleIds.has(m.id || m.idModule);
+      const isAssigned = 
+        (m.idResponsable || m.idEnseignant || m.teacherId) == teacherId || 
+        affectedModuleIds.has(m.id || m.idModule);
       return isAssigned;
     });
   }, [db.modules, db.affectations, teacherId]);

@@ -51,14 +51,27 @@ const createEtudiant = async (req, res) => {
         }
       });
 
-      // 2. Create Etudiant
+      let finalIdGroupeTD = idGroupeTD ? parseInt(idGroupeTD) : undefined;
+      let finalIdGroupeTP = idGroupeTP ? parseInt(idGroupeTP) : undefined;
+
+      // Verify that the groups actually exist in the DB to avoid foreign key violations
+      if (finalIdGroupeTD) {
+        const checkTD = await tx.groupe.findUnique({ where: { idGroupe: finalIdGroupeTD } });
+        if (!checkTD) finalIdGroupeTD = undefined;
+      }
+      if (finalIdGroupeTP) {
+        const checkTP = await tx.groupe.findUnique({ where: { idGroupe: finalIdGroupeTP } });
+        if (!checkTP) finalIdGroupeTP = undefined;
+      }
+
       const etudiant = await tx.etudiant.create({
         data: {
           utilisateurId: user.id,
           cne,
           idFiliere: idFiliere ? parseInt(idFiliere) : undefined,
-          idGroupeTD: idGroupeTD ? parseInt(idGroupeTD) : undefined,
-          idGroupeTP: idGroupeTP ? parseInt(idGroupeTP) : undefined,
+          idGroupeTD: finalIdGroupeTD,
+          idGroupeTP: finalIdGroupeTP,
+          anneeInscription: anneeInscription ? parseInt(anneeInscription) : 1,
           statut: 'ACTIF'
         }
       });
@@ -91,7 +104,7 @@ const createEtudiant = async (req, res) => {
  */
 const updateEtudiant = async (req, res) => {
   const { id } = req.params;
-  const { nom, prenom, email, cne, idFiliere, idGroupeTD, idGroupeTP, statut } = req.body;
+  const { nom, prenom, email, cne, idFiliere, idGroupeTD, idGroupeTP, statut, anneeInscription } = req.body;
 
   try {
     const etudiant = await prisma.etudiant.findUnique({ where: { idEtudiant: parseInt(id) } });
@@ -104,14 +117,37 @@ const updateEtudiant = async (req, res) => {
         data: { nom, prenom, email }
       });
 
+      // Handle Group IDs: only update if the field is present in the request. 
+      // Use null only if explicitly sent as null or empty string.
+      let finalIdGroupeTD = undefined;
+      if (req.body.hasOwnProperty('idGroupeTD')) {
+        finalIdGroupeTD = (idGroupeTD === null || idGroupeTD === '') ? null : parseInt(idGroupeTD);
+      }
+      
+      let finalIdGroupeTP = undefined;
+      if (req.body.hasOwnProperty('idGroupeTP')) {
+        finalIdGroupeTP = (idGroupeTP === null || idGroupeTP === '') ? null : parseInt(idGroupeTP);
+      }
+
+      // Safe validation: if a number is provided, ensure the group exists
+      if (typeof finalIdGroupeTD === 'number' && !isNaN(finalIdGroupeTD)) {
+        const checkTD = await tx.groupe.findUnique({ where: { idGroupe: finalIdGroupeTD } });
+        if (!checkTD) finalIdGroupeTD = undefined; 
+      }
+      if (typeof finalIdGroupeTP === 'number' && !isNaN(finalIdGroupeTP)) {
+        const checkTP = await tx.groupe.findUnique({ where: { idGroupe: finalIdGroupeTP } });
+        if (!checkTP) finalIdGroupeTP = undefined;
+      }
+
       // Update Etudiant
       const updatedEtudiant = await tx.etudiant.update({
         where: { idEtudiant: parseInt(id) },
         data: {
           cne,
           idFiliere: idFiliere ? parseInt(idFiliere) : undefined,
-          idGroupeTD: idGroupeTD ? parseInt(idGroupeTD) : undefined,
-          idGroupeTP: idGroupeTP ? parseInt(idGroupeTP) : undefined,
+          idGroupeTD: finalIdGroupeTD,
+          idGroupeTP: finalIdGroupeTP,
+          anneeInscription: anneeInscription ? parseInt(anneeInscription) : undefined,
           statut
         }
       });
@@ -124,6 +160,9 @@ const updateEtudiant = async (req, res) => {
       data: result
     });
   } catch (error) {
+    if (error.code === 'P2002') {
+      return res.status(400).json({ message: 'Conflict: Email or CNE already exists' });
+    }
     console.error('updateEtudiant error:', error);
     res.status(500).json({ message: 'Server error' });
   }

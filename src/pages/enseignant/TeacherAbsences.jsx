@@ -66,7 +66,7 @@ const Toast = ({ toast, onClose }) => {
    ═══════════════════════════════════════════════════════════ */
 const TeacherAbsences = () => {
   const { currentUser } = useAuth();
-  const { db, save, remove, moduleName, groupName, roomName, studentName } = useData();
+  const { db, save, remove, fetchSync, moduleName, groupName, roomName, studentName } = useData();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -197,12 +197,16 @@ const TeacherAbsences = () => {
         method: 'POST',
         body: JSON.stringify({
           idEtudiants: absentStudentIds,
-          idSeance: selectedSession.id,
+          // Bug #1 fix: prefer the real DB primary key idSeance over the normalized alias 'id'
+          idSeance: selectedSession.idSeance || selectedSession.id,
           typeSeance: selectedSession.type
         })
       });
 
       setSaved(true);
+      // Bug #2 fix: re-fetch the full state so db.absences is refreshed immediately,
+      // making the Historique tab and dashboard badge reflect the newly saved roll-call.
+      await fetchSync();
       showToast('success', `Feuille de présence enregistrée — ${absentStudentIds.length} absence(s) saisie(s).`);
     } catch (error) {
       showToast('error', error.message || 'Erreur lors de la sauvegarde des absences.');

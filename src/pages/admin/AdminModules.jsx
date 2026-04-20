@@ -54,7 +54,7 @@ const AdminModules = () => {
       idModule: editingModule ? editingModule.idModule : nextId('modules'),
       idFiliere: parseInt(formData.idFiliere),
       coefficient: parseFloat(formData.coefficient),
-      idEnseignant: formData.idEnseignant ? parseInt(formData.idEnseignant) : null
+      idResponsable: formData.idResponsable || formData.idEnseignant ? parseInt(formData.idResponsable || formData.idEnseignant) : null
     };
     save('modules', data);
     
@@ -144,7 +144,7 @@ const AdminModules = () => {
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <User size={12} color="var(--text-3)" />
-                      <span style={{ fontSize: '0.85rem', fontWeight: '500', color: 'var(--text-2)' }}>{teacherName(m.idEnseignant)}</span>
+                      <span style={{ fontSize: '0.85rem', fontWeight: '500', color: 'var(--text-2)' }}>{teacherName(m.idResponsable)}</span>
                     </div>
                   </td>
                   <td style={{ textAlign: 'right', padding: '15px 20px' }}>
@@ -210,9 +210,9 @@ const AdminModules = () => {
                </div>
 
                <div className="form-group">
-                 <label className="form-label">Enseignant Coordonnateur</label>
-                  <select className="form-control" value={formData.idEnseignant} onChange={(e) => setFormData({...formData, idEnseignant: e.target.value})}>
-                    <option value="">Non assigné</option>
+                 <label className="form-label">Responsable du Module *</label>
+                  <select className="form-control" value={formData.idResponsable || formData.idEnseignant || ''} onChange={(e) => setFormData({...formData, idResponsable: e.target.value, idEnseignant: e.target.value})} required>
+                    <option value="">Choisir un responsable...</option>
                     {Array.isArray(db.enseignants) && db.enseignants.map(t => {
                         const user = Array.isArray(db.utilisateurs) ? db.utilisateurs.find(u => u.id === t.utilisateurId) : null;
                         const teacherObj = user || t;

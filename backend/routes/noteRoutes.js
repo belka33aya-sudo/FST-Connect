@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { recordNote, recordBulkNotes, getMyNotes, submitReclamation } = require('../controllers/noteController');
+const { recordNote, recordBulkNotes, getMyNotes, submitReclamation, updateReclamation } = require('../controllers/noteController');
 const { protect, authorize } = require('../middleware/authMiddleware');
 
 // Record/Update grade - Teacher Only
@@ -14,5 +14,8 @@ router.get('/me', protect, getMyNotes);
 
 // Submit complaint - Student Only
 router.post('/reclaim', protect, authorize('student'), submitReclamation);
+
+// Update complaint status - Admin Only
+router.patch('/reclaim/:id', protect, authorize('admin'), updateReclamation);
 
 module.exports = router;

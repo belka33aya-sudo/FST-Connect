@@ -22,12 +22,17 @@ const Announcements = () => {
     );
   }, [db.annonces, db.announcements, currentUser, isStudent, filiereName, getStudentByUserId]);
 
+  const markedRef = React.useRef(new Set());
+
   useEffect(() => {
     // Mark as read
     if (currentUser) {
       const annList = db.annonces || db.announcements || [];
       annList.forEach(a => {
-        if (!(a.readBy || []).includes(currentUser.id)) {
+        const annId = a.id || a.idAnnonce;
+        if (!(a.readBy || []).includes(currentUser.id) && !markedRef.current.has(annId)) {
+          markedRef.current.add(annId);
+          console.log(`Marking announcement ${annId} as read`);
           const updated = { ...a, readBy: [...(a.readBy || []), currentUser.id] };
           save('annonces', updated);
         }

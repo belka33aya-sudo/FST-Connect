@@ -3,7 +3,7 @@ import { useData } from '../contexts/DataContext';
 import { useToast } from '../contexts/ToastContext';
 
 const Filieres = () => {
-  const { db, save, remove, nextId, teacherName } = useData();
+  const { db, save, remove, nextId, teacherName, fetchSync } = useData();
   const { success, error } = useToast();
 
   const [selectedFiliereId, setSelectedFiliereId] = useState(null);
@@ -17,14 +17,16 @@ const Filieres = () => {
   const [showGroupPanel, setShowGroupPanel] = useState(false);
   const [groupForm, setGroupForm] = useState({ name: '', type: 'TD', capacity: 30 });
 
-  const selectedFiliere = db.filieres.find(f => f.id === selectedFiliereId);
-  const filiereGroups = db.groups.filter(g => g.filiereId === selectedFiliereId);
-  const filiereModules = db.modules.filter(m => m.filiereId === selectedFiliereId);
+  // Filieres from the DB use idFiliere as the real primary key.
+  // normalizeData() copies it to .id, so we use .idFiliere || .id for resilience.
+  const selectedFiliere = db.filieres.find(f => (f.idFiliere || f.id) === selectedFiliereId);
+  const filiereGroups  = db.groupes.filter(g => (g.idFiliere || g.filiereId) === selectedFiliereId);
+  const filiereModules = db.modules.filter(m => (m.idFiliere || m.filiereId) === selectedFiliereId);
 
   /* ── Filieres Actions ── */
   const handleDeleteFiliere = (id, e) => {
     e.stopPropagation();
-    const hasStudents = db.students.some(s => s.filiereId === id);
+    const hasStudents = db.etudiants.some(s => (s.idFiliere || s.filiereId) === id);
     if (hasStudents) {
       error('Erreur', 'Impossible de supprimer une filière qui a des étudiants inscrits.');
       return;
@@ -38,29 +40,42 @@ const Filieres = () => {
 
   const openFiliereAdd = () => {
     setEditingFiliere(null);
-    setFiliereForm({ code: '', name: '', level: "Cycle d'Ingénieur", semesters: 6, duree: 3, coordinator: db.teachers[0]?.id || '' });
+    setFiliereForm({ code: '', intitule: '', level: "Cycle d'Ingénieur", semesters: 6, duree: 3, coordinator: db.enseignants[0]?.idEnseignant || '' });
     setShowFilierePanel(true);
   };
 
   const openFiliereEdit = (filiere, e) => {
     e.stopPropagation();
     setEditingFiliere(filiere);
-    setFiliereForm({ ...filiere });
+    // Populate the form using the real DB field names (intitule, not name)
+    setFiliereForm({
+      code:     filiere.code     || '',
+      intitule: filiere.intitule || filiere.name || '',
+    });
     setShowFilierePanel(true);
   };
 
-  const handleFiliereSubmit = (e) => {
+  const handleFiliereSubmit = async (e) => {
     e.preventDefault();
-    if (!filiereForm.code || !filiereForm.name) return;
-    
-    const payload = { ...filiereForm, coordinator: parseInt(filiereForm.coordinator) };
+    // 'code' and 'intitule' are the real DB column names.
+    // 'name' was the old frontend alias — the backend PATCH only accepts 'code' + 'intitule'.
+    if (!filiereForm.code || !filiereForm.intitule) return;
+
+    const payload = {
+      code:     filiereForm.code,
+      intitule: filiereForm.intitule,
+    };
+
     if (editingFiliere) {
-      save('filieres', { ...editingFiliere, ...payload });
+      // Merge with editing record so idFiliere is preserved for the PATCH URL
+      await save('filieres', { ...editingFiliere, ...payload });
       success('Modifiée', 'Filière mise à jour.');
     } else {
-      save('filieres', { id: nextId('filieres'), ...payload });
+      await save('filieres', { id: nextId('filieres'), ...payload });
       success('Ajoutée', 'Nouvelle filière ajoutée.');
     }
+    // Re-sync so the left panel list reflects the DB after the write
+    await fetchSync();
     setShowFilierePanel(false);
   };
 
@@ -113,12 +128,14 @@ const Filieres = () => {
           </div>
           <div style={{ overflowY: 'auto', flex: 1 }}>
             {db.filieres.map(f => {
-              const count = db.students.filter(s => s.filiereId === f.id).length;
-              const isSelected = selectedFiliereId === f.id;
+              // Use idFiliere (real DB PK) with id as fallback (normalizeData alias)
+              const fId = f.idFiliere || f.id;
+              const count = db.etudiants.filter(s => (s.idFiliere || s.filiereId) === fId).length;
+              const isSelected = selectedFiliereId === fId;
               return (
                 <div 
-                  key={f.id} 
-                  onClick={() => setSelectedFiliereId(f.id)}
+                  key={fId} 
+                  onClick={() => setSelectedFiliereId(fId)}
                   style={{ 
                     padding: '15px', borderBottom: '1px solid var(--border)', cursor: 'pointer',
                     background: isSelected ? 'var(--surface-2)' : 'transparent',
@@ -130,14 +147,14 @@ const Filieres = () => {
                     <div style={{ fontWeight: 'bold', color: 'var(--blue-dark)' }}>{f.code}</div>
                     <div className="badge badge-gray">{count} étudiants</div>
                   </div>
-                  <div style={{ fontSize: '0.85rem', color: 'var(--text-2)', marginTop: '4px' }}>{f.name}</div>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-2)', marginTop: '4px' }}>{f.intitule || f.name}</div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px' }}>
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-3)' }}>{f.level}</span>
                     <div style={{ display: 'flex', gap: '8px' }}>
                       <button className="btn btn-ghost btn-sm" onClick={(e) => openFiliereEdit(f, e)} style={{ padding: '4px' }}>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                       </button>
-                      <button className="btn btn-ghost btn-sm" onClick={(e) => handleDeleteFiliere(f.id, e)} style={{ padding: '4px', color: 'var(--danger)' }}>
+                      <button className="btn btn-ghost btn-sm" onClick={(e) => handleDeleteFiliere(fId, e)} style={{ padding: '4px', color: 'var(--danger)' }}>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
                       </button>
                     </div>
@@ -165,18 +182,19 @@ const Filieres = () => {
                   {filiereGroups.length > 0 ? (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
                       {filiereGroups.map(g => {
-                        const stdCount = db.students.filter(s => s.groupTDId === g.id || s.groupTPId === g.id).length;
+                        const gId = g.idGroupe || g.id;
+                        const stdCount = db.etudiants.filter(s => (s.idGroupeTD || s.groupTDId) === gId || (s.idGroupeTP || s.groupTPId) === gId).length;
                         return (
-                          <div key={g.id} style={{ border: '1px solid var(--border)', borderRadius: '8px', padding: '12px', background: 'var(--bg)' }}>
+                          <div key={gId} style={{ border: '1px solid var(--border)', borderRadius: '8px', padding: '12px', background: 'var(--bg)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                              <span style={{ fontWeight: '600' }}>{g.name}</span>
+                              <span style={{ fontWeight: '600' }}>{g.nom || g.name}</span>
                               <span className={`badge ${g.type === 'TP' ? 'badge-orange' : 'badge-green'}`}>{g.type}</span>
                             </div>
                             <div style={{ fontSize: '0.85rem', color: 'var(--text-2)', marginBottom: '10px' }}>
-                              {stdCount} / {g.capacity} étudiants
+                              {stdCount} étudiants
                             </div>
                             <div style={{ textAlign: 'right' }}>
-                              <button onClick={() => handleDeleteGroup(g.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', fontSize: '0.8rem' }}>Supprimer</button>
+                              <button onClick={() => handleDeleteGroup(gId)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', fontSize: '0.8rem' }}>Supprimer</button>
                             </div>
                           </div>
                         );
@@ -206,13 +224,13 @@ const Filieres = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {[...filiereModules].sort((a,b) => a.semester - b.semester).map(m => (
-                          <tr key={m.id}>
-                            <td>S{m.semester}</td>
+                        {[...filiereModules].sort((a,b) => (a.semestre || a.semester || 0) - (b.semestre || b.semester || 0)).map(m => (
+                          <tr key={m.idModule || m.id}>
+                            <td>S{m.semestre || m.semester}</td>
                             <td style={{ fontWeight: '600' }}>{m.code}</td>
-                            <td>{m.title}</td>
-                            <td>{m.coeff}</td>
-                            <td>{teacherName(m.teacherId)}</td>
+                            <td>{m.intitule || m.title}</td>
+                            <td>{m.coeffCC || m.coeff}</td>
+                            <td>{teacherName(m.idEnseignant || m.teacherId)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -250,7 +268,7 @@ const Filieres = () => {
             </div>
             <div>
               <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500', fontSize: '0.9rem' }}>Intitulé complet *</label>
-              <input type="text" value={filiereForm.name} onChange={e => setFiliereForm({...filiereForm, name: e.target.value})} required style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--border)', borderRadius: '6px' }} />
+              <input type="text" value={filiereForm.intitule || ''} onChange={e => setFiliereForm({...filiereForm, intitule: e.target.value})} required style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--border)', borderRadius: '6px' }} />
             </div>
             <div>
               <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500', fontSize: '0.9rem' }}>Niveau</label>

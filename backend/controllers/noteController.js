@@ -6,29 +6,35 @@ const prisma = require('../prismaClient');
  * @access  Private/Teacher
  */
 const recordNote = async (req, res) => {
-  const { idEtudiant, idModule, idExamen, valeurCC, valeurEF, moyenneModule } = req.body;
+  const { idEtudiant, idModule, idExamen, valeurCC, valeurEF, moyenneModule, idNote } = req.body;
 
   try {
-    const note = await prisma.note.upsert({
-      where: {
-        // Multi-field uniqueness handling if needed, or find current
-        idNote: req.body.idNote || 0
-      },
-      update: {
-        valeurCC,
-        valeurEF,
-        moyenneModule,
-        dateSaisie: new Date()
-      },
-      create: {
-        idEtudiant,
-        idModule,
-        idExamen,
-        valeurCC,
-        valeurEF,
-        moyenneModule
-      }
-    });
+    let note;
+
+    // Bug #4 fix: upsert(where: { idNote: 0 }) is invalid — Prisma cannot find or create
+    // a record at PK=0 on auto-increment schemas. Use explicit create vs update instead.
+    if (idNote && parseInt(idNote) > 0) {
+      note = await prisma.note.update({
+        where: { idNote: parseInt(idNote) },
+        data: {
+          valeurCC,
+          valeurEF,
+          moyenneModule,
+          dateSaisie: new Date()
+        }
+      });
+    } else {
+      note = await prisma.note.create({
+        data: {
+          idEtudiant,
+          idModule,
+          idExamen,
+          valeurCC,
+          valeurEF,
+          moyenneModule
+        }
+      });
+    }
 
     res.json({
       status: 'success',
@@ -136,39 +142,45 @@ const recordBulkNotes = async (req, res) => {
     const coeffCC = module?.coeffCC || 0.4;
     const coeffEF = module?.coeffEF || 0.6;
 
-    // 2. Process notes inside a transaction
+    // Bug #4 fix: upsert(where: { idNote: -1 }) is invalid for the same reason as recordNote.
+    // Map each note entry to an explicit update (if idNote > 0) or create (if no idNote).
     const results = await prisma.$transaction(
       notes.map((n) => {
         const cc = n.valeurCC !== undefined ? parseFloat(n.valeurCC) : null;
         const ef = n.valeurEF !== undefined ? parseFloat(n.valeurEF) : null;
-        
+
         // Auto-calculate average if both provided
         let moyenne = n.moyenneModule ? parseFloat(n.moyenneModule) : null;
         if (cc !== null && ef !== null) {
           moyenne = (cc * coeffCC) + (ef * coeffEF);
         }
 
-        return prisma.note.upsert({
-          where: {
-            idNote: n.idNote && n.idNote > 0 ? parseInt(n.idNote) : -1
-          },
-          update: {
-            valeurCC: cc ?? undefined,
-            valeurEF: ef ?? undefined,
-            moyenneModule: moyenne ?? undefined,
-            estVerrouillee: n.publiee || false,
-            dateSaisie: new Date()
-          },
-          create: {
-            idEtudiant: parseInt(n.idEtudiant),
-            idModule: parseInt(idModule),
-            idExamen: idExamen ? parseInt(idExamen) : undefined,
-            valeurCC: cc ?? 0,
-            valeurEF: ef ?? 0,
-            moyenneModule: moyenne ?? 0,
-            estVerrouillee: n.publiee || false
-          }
-        });
+        const existingId = n.idNote && parseInt(n.idNote) > 0 ? parseInt(n.idNote) : null;
+
+        if (existingId) {
+          return prisma.note.update({
+            where: { idNote: existingId },
+            data: {
+              valeurCC: cc ?? undefined,
+              valeurEF: ef ?? undefined,
+              moyenneModule: moyenne ?? undefined,
+              estVerrouillee: n.publiee || false,
+              dateSaisie: new Date()
+            }
+          });
+        } else {
+          return prisma.note.create({
+            data: {
+              idEtudiant: parseInt(n.idEtudiant),
+              idModule: parseInt(idModule),
+              idExamen: idExamen ? parseInt(idExamen) : undefined,
+              valeurCC: cc ?? 0,
+              valeurEF: ef ?? 0,
+              moyenneModule: moyenne ?? 0,
+              estVerrouillee: n.publiee || false
+            }
+          });
+        }
       })
     );
 
@@ -183,9 +195,38 @@ const recordBulkNotes = async (req, res) => {
   }
 };
 
+/**
+ * @desc    Update reclamation status (Admin only)
+ * @route   PATCH /api/notes/reclaim/:id
+ * @access  Private/Admin
+ */
+const updateReclamation = async (req, res) => {
+  const { id } = req.params;
+  const { statut, reponseEnseignant } = req.body;
+
+  try {
+    const reclamation = await prisma.reclamation.update({
+      where: { idReclamation: parseInt(id) },
+      data: {
+        statut,
+        reponseEnseignant
+      }
+    });
+
+    res.json({
+      status: 'success',
+      data: reclamation
+    });
+  } catch (error) {
+    console.error('updateReclamation error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = {
   recordNote,
   recordBulkNotes,
   getMyNotes,
-  submitReclamation
+  submitReclamation,
+  updateReclamation
 };

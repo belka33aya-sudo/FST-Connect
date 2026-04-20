@@ -82,9 +82,12 @@ model Etudiant {
   idFiliere       Int?
   idGroupeTD      Int?
   idGroupeTP      Int?
+  idGroupeProjet  Int?
+  anneeInscription Int              @default(1)
   absences        Absence[]
   compteurAbsence CompteurAbsence?
   filiere         Filiere?         @relation(fields: [idFiliere], references: [idFiliere])
+  groupeProjet    Groupe?          @relation("EtudiantProjet", fields: [idGroupeProjet], references: [idGroupe])
   groupeTD        Groupe?          @relation("EtudiantTD", fields: [idGroupeTD], references: [idGroupe])
   groupeTP        Groupe?          @relation("EtudiantTP", fields: [idGroupeTP], references: [idGroupe])
   utilisateur     Utilisateur      @relation(fields: [utilisateurId], references: [id], onDelete: Cascade)
@@ -95,42 +98,53 @@ model Etudiant {
 }
 
 model Enseignant {
-  utilisateurId     Int           @unique
-  matricule         String        @unique @db.VarChar(50)
-  grade             String?       @db.VarChar(50)
-  specialite        String?       @db.VarChar(100)
-  volumeHoraireBase Int?
-  idEnseignant      Int           @id @default(autoincrement())
-  statut            String        @default("ACTIF") @db.VarChar(20)
-  type              String?       @db.VarChar(50)
-  affectations      Affectation[]
-  utilisateur       Utilisateur   @relation(fields: [utilisateurId], references: [id], onDelete: Cascade)
-  pfesEncadres      Pfe[]
-  seances           Seance[]
-  jurysMembre       Jury[]        @relation("JuryEnseignants")
+  utilisateurId      Int           @unique
+  matricule          String        @unique @db.VarChar(50)
+  grade              String?       @db.VarChar(50)
+  specialite         String?       @db.VarChar(100)
+  volumeHoraireBase  Int?
+  idEnseignant       Int           @id @default(autoincrement())
+  statut             String        @default("ACTIF") @db.VarChar(20)
+  type               String?       @db.VarChar(50)
+  affectations       Affectation[]
+  utilisateur        Utilisateur   @relation(fields: [utilisateurId], references: [id], onDelete: Cascade)
+  groupesResponsable Groupe[]      @relation("GroupeEnseignant")
+  modulesResponsable Module[]      @relation("ResponsableModule")
+  pfesEncadres       Pfe[]
+  seances            Seance[]
+  jurysMembre        Jury[]        @relation("JuryEnseignants")
 }
 
 model Filiere {
-  code      String     @unique @db.VarChar(20)
-  intitule  String     @db.VarChar(200)
-  idFiliere Int        @id @default(autoincrement())
-  edts      Edt[]
-  etudiants Etudiant[]
-  groupes   Groupe[]
-  modules   Module[]
-  documents Document[]
+  code            String     @unique @db.VarChar(20)
+  intitule        String     @db.VarChar(200)
+  idFiliere       Int        @id @default(autoincrement())
+  duree           Int?       @default(3)
+  niveauEtude     String?    @default("Cycle d'Ingénieur") @db.VarChar(50)
+  nombreSemestres Int?       @default(6)
+  documents       Document[]
+  edts            Edt[]
+  etudiants       Etudiant[]
+  groupes         Groupe[]
+  modules         Module[]
 }
 
 model Groupe {
-  type        String     @db.VarChar(10)
-  capaciteMax Int?
-  idFiliere   Int
-  idGroupe    Int        @id @default(autoincrement())
-  edts        Edt[]
-  etudiantsTD Etudiant[] @relation("EtudiantTD")
-  etudiantsTP Etudiant[] @relation("EtudiantTP")
-  filiere     Filiere    @relation(fields: [idFiliere], references: [idFiliere], onDelete: Cascade)
-  seances     Seance[]
+  type            String      @db.VarChar(10)
+  capaciteMax     Int?
+  idFiliere       Int
+  idGroupe        Int         @id @default(autoincrement())
+  nom             String?     @db.VarChar(50)
+  annee           String?     @db.VarChar(10)
+  description     String?
+  idEnseignant    Int?
+  edts            Edt[]
+  etudiantsProjet Etudiant[]  @relation("EtudiantProjet")
+  etudiantsTD     Etudiant[]  @relation("EtudiantTD")
+  etudiantsTP     Etudiant[]  @relation("EtudiantTP")
+  enseignant      Enseignant? @relation("GroupeEnseignant", fields: [idEnseignant], references: [idEnseignant])
+  filiere         Filiere     @relation(fields: [idFiliere], references: [idFiliere], onDelete: Cascade)
+  seances         Seance[]
 }
 
 model Club {
@@ -144,18 +158,20 @@ model Club {
 }
 
 model Module {
-  code         String        @unique @db.VarChar(20)
-  intitule     String        @db.VarChar(200)
-  coefficient  Decimal?      @db.Decimal(4, 2)
-  semestre     String?       @db.VarChar(10)
-  idFiliere    Int?
-  idModule     Int           @id @default(autoincrement())
-  affectations Affectation[]
-  documents    Document[]
-  examens      Examen[]
-  filiere      Filiere?      @relation(fields: [idFiliere], references: [idFiliere])
-  notes        Note[]
-  seances      Seance[]
+  code          String        @unique @db.VarChar(20)
+  intitule      String        @db.VarChar(200)
+  coefficient   Decimal?      @db.Decimal(4, 2)
+  semestre      String?       @db.VarChar(10)
+  idFiliere     Int?
+  idResponsable Int?
+  idModule      Int           @id @default(autoincrement())
+  affectations  Affectation[]
+  documents     Document[]
+  examens       Examen[]
+  filiere       Filiere?      @relation(fields: [idFiliere], references: [idFiliere])
+  responsable   Enseignant?   @relation("ResponsableModule", fields: [idResponsable], references: [idEnseignant])
+  notes         Note[]
+  seances       Seance[]
 }
 
 model Affectation {
@@ -175,10 +191,19 @@ model Document {
   cheminFichier String   @db.VarChar(255)
   dateUpload    DateTime @default(now())
   idModule      Int?
-  idFiliere     Int?
   idAuteur      Int?
-  module        Module?  @relation(fields: [idModule], references: [idModule], onDelete: Cascade)
-  filiere       Filiere? @relation(fields: [idFiliere], references: [idFiliere], onDelete: Cascade)
+  idFiliere             Int?
+  version               String?   @default("1.0") @db.VarChar(20)
+  status                String?   @default("PUBLIÉ") @db.VarChar(20)
+  author                String?   @default("Administration") @db.VarChar(100)
+  dateLimite            DateTime? @db.Date
+  deadline              String?   @db.VarChar(50)
+  description           String?   @db.Text
+  submissionsCount      Int?      @default(0)
+  totalStudents         Int?      @default(30)
+  nombreTelechargements Int?      @default(0)
+  filiere               Filiere?  @relation(fields: [idFiliere], references: [idFiliere], onDelete: Cascade)
+  module                Module?   @relation(fields: [idModule], references: [idModule], onDelete: Cascade)
 }
 
 model Semestre {
@@ -326,10 +351,10 @@ model Pfe {
   avisEncadrant  String?
   idEncadrant    Int?
   idEtudiant     Int?
+  idJury         Int?
   idPG           Int           @id @default(autoincrement())
   noteFinale     Decimal?      @db.Decimal(4, 2)
   rapportDepose  Boolean       @default(false)
-  idJury         Int?
   documents      DocumentPfe[]
   encadrant      Enseignant?   @relation(fields: [idEncadrant], references: [idEnseignant])
   etudiant       Etudiant?     @relation(fields: [idEtudiant], references: [idEtudiant])
@@ -346,7 +371,7 @@ model Stage {
   rapportDepose    Boolean       @default(false)
   noteStage        Decimal?      @db.Decimal(4, 2)
   documents        DocumentPfe[]
-  etudiant         Etudiant?     @relation(fields: [idEtudiant], references: [idEtudiant])
+  etudiant         Etudiant      @relation(fields: [idEtudiant], references: [idEtudiant])
 }
 
 model Jury {
@@ -372,11 +397,11 @@ model Annonce {
   contenu        String
   dateCreation   DateTime        @default(now())
   cible          String          @default("tous") @db.VarChar(100)
+  idAdminAuth    Int?
   idAnnonce      Int             @id @default(autoincrement())
   idAuteur       Int?
   statut         String          @default("PUBLIEE") @db.VarChar(20)
   urgent         Boolean         @default(false)
-  idAdminAuth    Int?
   administrateur Administrateur? @relation("AdminAnnonces", fields: [idAdminAuth], references: [id])
   auteur         Utilisateur?    @relation(fields: [idAuteur], references: [id])
 }

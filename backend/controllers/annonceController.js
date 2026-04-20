@@ -9,6 +9,10 @@ const publishAnnonce = async (req, res) => {
   const { titre, contenu, urgent, cible } = req.body;
 
   try {
+    const admin = await prisma.administrateur.findUnique({
+      where: { utilisateurId: req.user.id }
+    });
+
     const annonce = await prisma.annonce.create({
       data: {
         titre,
@@ -16,6 +20,7 @@ const publishAnnonce = async (req, res) => {
         urgent: urgent || false,
         cible: cible || 'tous',
         idAuteur: req.user.id,
+        idAdminAuth: admin ? admin.id : undefined,
         statut: 'PUBLIEE'
       }
     });

@@ -79,17 +79,14 @@ const Rooms = () => {
 
     const roomToSave = {
       ...formData,
+      // Only include ID if we're editing
+      ...(editingRoom && { id: editingRoom.id, idSalle: editingRoom.idSalle }),
       equipment: equipmentArray,
       capacity: parseInt(formData.capacity) || 0
     };
 
-    if (editingRoom) {
-      save('rooms', { ...editingRoom, ...roomToSave });
-      success('Modifiée', 'Salle mise à jour avec succès.');
-    } else {
-      save('rooms', { id: nextId('rooms'), ...roomToSave });
-      success('Ajoutée', 'Nouvelle salle ajoutée.');
-    }
+    save('rooms', roomToSave);
+    success(editingRoom ? 'Modifiée' : 'Ajoutée', editingRoom ? 'Salle mise à jour avec succès.' : 'Nouvelle salle ajoutée.');
     closePanel();
   };
 

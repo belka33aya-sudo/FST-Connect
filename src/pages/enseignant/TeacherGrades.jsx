@@ -11,6 +11,7 @@ const TeacherGrades = () => {
 
   const [selectedModuleId, setSelectedModuleId] = useState('');
   const [editGrades, setEditGrades] = useState({});
+  const [groupGrade, setGroupGrade] = useState({ groupId: '', cc: '', final: '' });
 
   const myModules = useMemo(() => {
     if (!teacherId) return [];
@@ -42,6 +43,12 @@ const TeacherGrades = () => {
     const filiereId = selectedModule.idFiliere || selectedModule.filiereId;
     return filiereId ? db.etudiants.filter(s => (s.idFiliere == filiereId || s.filiereId == filiereId)) : db.etudiants;
   }, [db.etudiants, selectedModule]);
+
+  const projectGroups = useMemo(() => {
+    if (!selectedModule) return [];
+    const filiereId = selectedModule.idFiliere || selectedModule.filiereId;
+    return (db.groupes || []).filter(g => g.type === 'PROJET' && (g.idFiliere == filiereId || g.filiereId == filiereId));
+  }, [db.groupes, selectedModule]);
 
   // Load initial grades from db to local state whenever module changes or db changes
   React.useEffect(() => {
@@ -184,8 +191,51 @@ const TeacherGrades = () => {
         </div>
       </div>
 
+      {selectedModule && projectGroups.length > 0 && (
+        <div className="page-card" style={{ marginTop: '24px' }}>
+          <div className="page-card-header">
+            <h3 className="page-card-title">Saisie Rapide par Projet</h3>
+          </div>
+          <div className="page-card-body" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <select className="form-control" value={groupGrade.groupId} onChange={(e) => setGroupGrade({...groupGrade, groupId: e.target.value})}>
+              <option value="">-- Sélectionnez un Projet --</option>
+              {projectGroups.map(pg => (
+                <option key={pg.idGroupe || pg.id} value={pg.idGroupe || pg.id}>{pg.nom} ({pg.etudiantsProjet?.length || 0} membres)</option>
+              ))}
+            </select>
+            {groupGrade.groupId && (
+              <>
+                <input type="text" className="form-control" style={{ width: 120 }} placeholder="Note CC" value={groupGrade.cc} onChange={(e) => setGroupGrade({...groupGrade, cc: e.target.value.replace(/[^0-9.]/g, '')})} />
+                <input type="text" className="form-control" style={{ width: 120 }} placeholder="Note Final" value={groupGrade.final} onChange={(e) => setGroupGrade({...groupGrade, final: e.target.value.replace(/[^0-9.]/g, '')})} />
+                <button className="btn btn-outline-blue" onClick={() => {
+                  const pg = projectGroups.find(g => (g.idGroupe || g.id) == groupGrade.groupId);
+                  if (!pg || !pg.etudiantsProjet) return;
+                  const newGrades = { ...editGrades };
+                  pg.etudiantsProjet.forEach(st => {
+                    const stId = st.idEtudiant || st.id;
+                    if (newGrades[stId]) {
+                      if (groupGrade.cc !== '') {
+                        newGrades[stId].cc = Math.min(20, parseFloat(groupGrade.cc)).toString();
+                      }
+                      if (groupGrade.final !== '') {
+                        newGrades[stId].final = Math.min(20, parseFloat(groupGrade.final)).toString();
+                      }
+                    }
+                  });
+                  setEditGrades(newGrades);
+                  alert('Les notes ont été appliquées au brouillon pour tous les membres du projet ! Réviser et Sauvegarder la liste en bas.');
+                  setGroupGrade({ groupId: '', cc: '', final: '' });
+                }}>
+                  Appliquer au groupe
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {selectedModule ? (
-        <div className="page-card">
+        <div className="page-card" style={{ marginTop: '24px' }}>
           <div className="page-card-header">
             <h3 className="page-card-title">Étudiants Inscrits</h3>
           </div>

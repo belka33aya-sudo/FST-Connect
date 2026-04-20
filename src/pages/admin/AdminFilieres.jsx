@@ -11,73 +11,105 @@ const AdminFilieres = () => {
   const [showFilierePanel, setShowFilierePanel] = useState(false);
   const [showGroupPanel, setShowGroupPanel] = useState(false);
   const [editingFiliere, setEditingFiliere] = useState(null);
+  const [editingGroup, setEditingGroup] = useState(null);
 
-  const [filiereData, setFiliereData] = useState({ code: '', name: '', level: "Cycle d'Ingénieur", semesters: 6 });
-  const [groupData, setGroupData] = useState({ name: '', type: 'TD', capacity: 30 });
+  const [filiereData, setFiliereData] = useState({ code: '', intitule: '', niveauEtude: "Cycle d'Ingénieur", nombreSemestres: 6, duree: 3 });
+  const [groupData, setGroupData] = useState({ nom: '', type: 'TD', description: '', annee: new Date().getFullYear().toString(), idEnseignant: '', etudiantsIds: [] });
 
   const selectedFiliere = useMemo(() => 
-    db.filieres.find(f => f.id === selectedFiliereId), 
+    db.filieres.find(f => (f.idFiliere || f.id) === selectedFiliereId), 
   [db.filieres, selectedFiliereId]);
 
   const groups = useMemo(() => {
-    const list = db.groupesTD || db.groups || [];
-    return list.filter(g => (g.idFiliere || g.filiereId) === selectedFiliereId);
-  }, [db.groupesTD, db.groups, selectedFiliereId]);
+    return (db.groupes || []).filter(g => (g.idFiliere || g.filiereId) === selectedFiliereId);
+  }, [db.groupes, selectedFiliereId]);
 
   const filiereStats = useMemo(() => {
     const stats = {};
-    const studentsList = db.etudiants || db.students || [];
-    db.filieres.forEach(f => {
-      stats[f.id] = studentsList.filter(s => (s.idFiliere || s.filiereId) === f.id).length;
+    const studentsList = db.etudiants || [];
+    (db.filieres || []).forEach(f => {
+      const id = f.idFiliere || f.id;
+      stats[id] = studentsList.filter(s => (s.idFiliere || s.filiereId) === id).length;
     });
     return stats;
-  }, [db.filieres, db.etudiants, db.students]);
+  }, [db.filieres, db.etudiants]);
 
   const handleEditFiliere = (f) => {
     setEditingFiliere(f);
-    setFiliereData({ ...f });
+    setFiliereData({
+      code:            f.code            || '',
+      intitule:        f.intitule        || '',
+      niveauEtude:     f.niveauEtude     || "Cycle d'Ingénieur",
+      nombreSemestres: f.nombreSemestres || 6,
+      duree:           f.duree           || 3,
+    });
     setShowFilierePanel(true);
   };
 
-  const handleDeleteFiliere = (id) => {
+  const handleEditGroup = (g) => {
+    setEditingGroup(g);
+    setGroupData({
+      nom: g.nom || '',
+      type: g.type || 'TD',
+
+      description: g.description || '',
+      annee: g.annee || new Date().getFullYear().toString(),
+      idEnseignant: g.idEnseignant || '',
+      etudiantsIds: g.etudiantsProjet ? g.etudiantsProjet.map(e => e.idEtudiant || e.id) : []
+    });
+    setShowGroupPanel(true);
+  };
+
+  const handleOpenAddGroup = () => {
+    setEditingGroup(null);
+    setGroupData({ nom: '', type: 'TD', description: '', annee: new Date().getFullYear().toString(), idEnseignant: '', etudiantsIds: [] });
+    setShowGroupPanel(true);
+  };
+
+  const handleDeleteFiliere = async (id) => {
     if (window.confirm('Supprimer cette filière et tous ses groupes/modules associés ?')) {
-      remove('filieres', id);
+      await remove('filieres', id);
       success('Supprimée', 'La filière a été retirée.');
     }
   };
 
-  const handleSubmitFiliere = (e) => {
+  const handleSubmitFiliere = async (e) => {
     e.preventDefault();
-    const data = { 
-      ...filiereData, 
-      id: editingFiliere ? editingFiliere.id : nextId('filieres'),
-      nom: filiereData.nom || filiereData.name,
-      niveauEtude: filiereData.niveauEtude || filiereData.level,
-      nombreSemestres: parseInt(filiereData.nombreSemestres || filiereData.semesters),
-      // Legacy
-      name: filiereData.nom || filiereData.name,
-      level: filiereData.niveauEtude || filiereData.level,
-      semesters: parseInt(filiereData.nombreSemestres || filiereData.semesters)
+    const payload = {
+      ...filiereData,
+      ...(editingFiliere && { 
+        idFiliere: editingFiliere.idFiliere || editingFiliere.id,
+        id: editingFiliere.id 
+      })
     };
-    save('filieres', data);
+
+    await save('filieres', payload);
     setShowFilierePanel(false);
     success(editingFiliere ? 'Mise à jour' : 'Créée', 'Filière enregistrée.');
-    if (!editingFiliere) setSelectedFiliereId(data.id);
+    if (!editingFiliere) setSelectedFiliereId(payload.id);
   };
 
-  const handleSubmitGroup = (e) => {
+  const handleSubmitGroup = async (e) => {
     e.preventDefault();
     const data = { 
         ...groupData, 
-        id: nextId('groupesTD'), 
-        idFiliere: selectedFiliereId,
-        filiereId: selectedFiliereId,
-        typeGroup: groupData.typeGroup || groupData.type,
-        capacite: parseInt(groupData.capacite || groupData.capacity)
+        ...(editingGroup && { 
+          id: editingGroup.id, 
+          idGroupe: editingGroup.idGroupe || editingGroup.id 
+        }),
+        idFiliere: selectedFiliereId
     };
-    save('groupesTD', data);
+    await save('groupes', data);
     setShowGroupPanel(false);
-    success('Groupe Ajouté', `Le groupe ${groupData.nom || groupData.name} est prêt.`);
+    setGroupData({ nom: '', type: 'TD', description: '', annee: new Date().getFullYear().toString(), idEnseignant: '', etudiantsIds: [] });
+    success(editingGroup ? 'Mis à jour' : 'Ajouté', 'Groupe enregistré avec succès.');
+  };
+
+  const handleDeleteGroup = async (groupId) => {
+    if (window.confirm("Êtes-vous sûr de vouloir supprimer ce groupe ?")) {
+      await remove('groupes', groupId);
+      success('Succès', 'Groupe supprimé.');
+    }
   };
 
   return (
@@ -87,83 +119,98 @@ const AdminFilieres = () => {
           <h2 className="page-hero-title">Filières & Structure</h2>
           <p className="page-hero-sub">Configuration académique du département</p>
         </div>
-        <button className="btn btn-primary" onClick={() => { setEditingFiliere(null); setFiliereData({ code: '', name: '', level: "Cycle d'Ingénieur", semesters: 6 }); setShowFilierePanel(true); }}>
+        <button className="btn btn-primary" onClick={() => { setEditingFiliere(null); setFiliereData({ code: '', intitule: '', niveauEtude: "Cycle d'Ingénieur", nombreSemestres: 6, duree: 3 }); setShowFilierePanel(true); }}>
           <Plus size={18} style={{ marginRight: '8px' }} /> Nouvelle Filière
         </button>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '24px', alignItems: 'start' }}>
-        {/* Left: Sidebar style filiere list */}
         <div className="page-card animate-up" style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ padding: '16px 20px', background: 'var(--surface-2)', borderBottom: '1px solid var(--border)', fontSize: '0.75rem', fontWeight: '800', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
             Offre de Formation
           </div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {db.filieres.map(f => (
+            {(db.filieres || []).map(f => (
               <div 
-                key={f.id}
-                onClick={() => setSelectedFiliereId(f.id)}
+                key={f.id || f.idFiliere}
+                onClick={() => setSelectedFiliereId(f.id || f.idFiliere)}
                 style={{ 
                   padding: '16px 20px', 
                   cursor: 'pointer', 
                   borderBottom: '1px solid var(--border)',
-                  background: selectedFiliereId === f.id ? 'rgba(30,58,95,0.05)' : 'transparent',
-                  borderLeft: selectedFiliereId === f.id ? '4px solid var(--blue-mid)' : '4px solid transparent',
+                  background: selectedFiliereId === (f.id || f.idFiliere) ? 'rgba(30,58,95,0.05)' : 'transparent',
+                  borderLeft: selectedFiliereId === (f.id || f.idFiliere) ? '4px solid var(--blue-mid)' : '4px solid transparent',
                   transition: 'all 0.2s'
                 }}
                 className="filiere-item"
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontWeight: '700', color: 'var(--blue-dark)', fontSize: '0.95rem' }}>{f.code}</span>
-                  <span style={{ fontSize: '0.7rem', fontWeight: '800', background: 'var(--bg)', padding: '2px 6px', borderRadius: '4px', color: 'var(--text-3)' }}>{filiereStats[f.id] || 0}</span>
+                  <span style={{ fontSize: '0.7rem', fontWeight: '800', background: 'var(--bg)', padding: '2px 6px', borderRadius: '4px', color: 'var(--text-3)' }}>{filiereStats[f.id || f.idFiliere] || 0}</span>
                 </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-2)', marginTop: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.nom || f.name}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-2)', marginTop: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.intitule}</div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Right: Detailed View */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           {selectedFiliere ? (
             <>
-              {/* Info & Actions */}
               <div className="page-card animate-up" style={{ padding: '24px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
                   <div>
-                    <h3 style={{ fontSize: '1.4rem', fontWeight: '800', color: 'var(--blue-dark)', margin: 0 }}>{selectedFiliere.name}</h3>
+                    <h3 style={{ fontSize: '1.4rem', fontWeight: '800', color: 'var(--blue-dark)', margin: 0 }}>{selectedFiliere.intitule}</h3>
                     <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
-                       <span className="badge badge-blue">{selectedFiliere.level}</span>
-                       <span className="badge badge-gray">{selectedFiliere.semesters} Semestres</span>
+                       <span className="badge badge-blue">{selectedFiliere.niveauEtude || '—'}</span>
+                       <span className="badge badge-gray">{selectedFiliere.nombreSemestres || '—'} Semestres</span>
+                       {(selectedFiliere.duree) && <span className="badge badge-gray">{selectedFiliere.duree} an{selectedFiliere.duree > 1 ? 's' : ''}</span>}
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button className="btn btn-ghost btn-sm" onClick={() => handleEditFiliere(selectedFiliere)}><Edit size={16} /></button>
-                    <button className="btn btn-ghost btn-sm" onClick={() => handleDeleteFiliere(selectedFiliere.id)}><Trash2 size={16} color="var(--danger)" /></button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => handleDeleteFiliere(selectedFiliere.idFiliere || selectedFiliere.id)}><Trash2 size={16} color="var(--danger)" /></button>
                   </div>
                 </div>
               </div>
 
-              {/* Groups Grid */}
               <div className="page-card animate-up" style={{ animationDelay: '0.1s' }}>
                 <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <h4 style={{ margin: 0, fontWeight: '700', color: 'var(--blue-dark)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <Users size={18} /> Groupes TD & TP
                   </h4>
-                  <button className="btn btn-ghost btn-sm" style={{ color: 'var(--blue-mid)' }} onClick={() => setShowGroupPanel(true)}>
+                  <button className="btn btn-ghost btn-sm" style={{ color: 'var(--blue-mid)' }} onClick={handleOpenAddGroup}>
                     <Plus size={14} style={{ marginRight: '4px' }} /> Ajouter un groupe
                   </button>
                 </div>
-                <div style={{ padding: '20px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '16px' }}>
+                <div style={{ padding: '20px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '16px' }}>
                   {groups.map(g => (
-                    <div key={g.id} style={{ padding: '16px', borderRadius: '12px', background: 'var(--bg)', border: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div key={g.idGroupe || g.id} style={{ padding: '16px', borderRadius: '12px', background: 'var(--bg)', border: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
-                        <div style={{ fontWeight: '800', color: 'var(--blue-dark)' }}>{g.nom || g.name}</div>
-                        <div style={{ fontSize: '0.7rem', fontWeight: '700', color: 'var(--text-3)', textTransform: 'uppercase' }}>{g.typeGroup || g.type}</div>
+                        <div style={{ fontWeight: '800', color: 'var(--blue-dark)' }}>{g.nom || "Groupe sans nom"}</div>
+                        <div style={{ fontSize: '0.7rem', fontWeight: '700', color: 'var(--text-3)', textTransform: 'uppercase' }}>{g.type}</div>
+
                       </div>
-                      <div style={{ textAlign: 'right' }}>
-                         <div style={{ fontSize: '0.9rem', fontWeight: '800', color: 'var(--blue-mid)' }}>{(db.etudiants || db.students || []).filter(s => (s.idGroupeTD || s.groupTDId) === g.id).length}</div>
-                         <div style={{ fontSize: '0.65rem', color: 'var(--text-3)' }}>ÉTUDIANTS</div>
+                      <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
+                         <div>
+                           <div style={{ fontSize: '0.9rem', fontWeight: '800', color: 'var(--blue-mid)' }}>
+                             {g.type === 'PROJET' 
+                               ? (g.etudiantsProjet?.length || g._count?.etudiantsProjet || 0)
+                               : (db.etudiants || []).filter(s => 
+                                   (s.idGroupeTD) === (g.idGroupe || g.id) || 
+                                   (s.idGroupeTP) === (g.idGroupe || g.id)
+                                 ).length}
+                           </div>
+                           <div style={{ fontSize: '0.65rem', color: 'var(--text-3)' }}>INSCRITS</div>
+                         </div>
+                         <div style={{ display: 'flex', gap: '4px' }}>
+                           <button className="btn btn-ghost btn-sm" onClick={() => handleEditGroup(g)} style={{ padding: '4px', height: 'auto', minHeight: '0' }}>
+                             <Edit size={14} />
+                           </button>
+                           <button className="btn btn-ghost btn-sm" onClick={() => handleDeleteGroup(g.idGroupe || g.id)} style={{ padding: '4px', height: 'auto', minHeight: '0' }}>
+                             <Trash2 size={14} color="var(--danger)" />
+                           </button>
+                         </div>
                       </div>
                     </div>
                   ))}
@@ -180,7 +227,6 @@ const AdminFilieres = () => {
         </div>
       </div>
 
-      {/* Filiere Side Panel */}
       <div className={`side-panel-overlay ${showFilierePanel ? 'open' : ''}`} onClick={() => setShowFilierePanel(false)}>
         <div className="side-panel" onClick={e => e.stopPropagation()}>
           <div className="side-panel-header">
@@ -194,20 +240,26 @@ const AdminFilieres = () => {
                 <input type="text" className="form-control" value={filiereData.code} onChange={(e) => setFiliereData({...filiereData, code: e.target.value})} required />
               </div>
               <div className="form-group">
-                <label className="form-label">Nom Complet</label>
-                <input type="text" className="form-control" value={filiereData.name} onChange={(e) => setFiliereData({...filiereData, name: e.target.value})} required />
+                <label className="form-label">Intitulé complet</label>
+                <input type="text" className="form-control" value={filiereData.intitule} onChange={(e) => setFiliereData({...filiereData, intitule: e.target.value})} required />
               </div>
               <div className="form-group">
                 <label className="form-label">Niveau d'études</label>
-                <select className="form-control" value={filiereData.level} onChange={(e) => setFiliereData({...filiereData, level: e.target.value})}>
+                <select className="form-control" value={filiereData.niveauEtude} onChange={(e) => setFiliereData({...filiereData, niveauEtude: e.target.value})}>
                   <option value="Licence">Licence</option>
                   <option value="Master">Master</option>
                   <option value="Cycle d'Ingénieur">Cycle d'Ingénieur</option>
                 </select>
               </div>
-              <div className="form-group">
-                <label className="form-label">Nombre de Semestres</label>
-                <input type="number" className="form-control" value={filiereData.semesters} onChange={(e) => setFiliereData({...filiereData, semesters: e.target.value})} />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div className="form-group">
+                  <label className="form-label">Nombre de Semestres</label>
+                  <input type="number" min="1" max="12" className="form-control" value={filiereData.nombreSemestres} onChange={(e) => setFiliereData({...filiereData, nombreSemestres: e.target.value})} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Durée (années)</label>
+                  <input type="number" min="1" max="6" className="form-control" value={filiereData.duree} onChange={(e) => setFiliereData({...filiereData, duree: e.target.value})} />
+                </div>
               </div>
             </form>
           </div>
@@ -218,35 +270,104 @@ const AdminFilieres = () => {
         </div>
       </div>
 
-      {/* Group Side Panel */}
       <div className={`side-panel-overlay ${showGroupPanel ? 'open' : ''}`} onClick={() => setShowGroupPanel(false)}>
         <div className="side-panel" onClick={e => e.stopPropagation()}>
           <div className="side-panel-header">
-            <h3 className="side-panel-title">Ajouter un Groupe</h3>
+            <h3 className="side-panel-title">{editingGroup ? 'Modifier le Groupe' : 'Ajouter un Groupe'}</h3>
             <button className="modal-close" onClick={() => setShowGroupPanel(false)}>×</button>
           </div>
           <div className="side-panel-body">
             <form id="groupForm" onSubmit={handleSubmitGroup} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               <div className="form-group">
                 <label className="form-label">Nom du Groupe (ex: G1, TP-B)</label>
-                <input type="text" className="form-control" value={groupData.name} onChange={(e) => setGroupData({...groupData, name: e.target.value})} required />
+                <input type="text" className="form-control" value={groupData.nom} onChange={(e) => setGroupData({...groupData, nom: e.target.value})} required />
               </div>
               <div className="form-group">
                 <label className="form-label">Type</label>
                 <select className="form-control" value={groupData.type} onChange={(e) => setGroupData({...groupData, type: e.target.value})}>
                   <option value="TD">TD (Travaux Dirigés)</option>
                   <option value="TP">TP (Travaux Pratiques)</option>
+                  <option value="PROJET">Projet</option>
                 </select>
               </div>
-              <div className="form-group">
-                <label className="form-label">Capacité Théorique</label>
-                <input type="number" className="form-control" value={groupData.capacity} onChange={(e) => setGroupData({...groupData, capacity: e.target.value})} />
-              </div>
+              
+              {groupData.type === 'PROJET' && (
+                <>
+                  <div className="form-group">
+                    <label className="form-label">Description du projet</label>
+                    <textarea className="form-control" rows="3" value={groupData.description} onChange={(e) => setGroupData({...groupData, description: e.target.value})}></textarea>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Année</label>
+                    <input type="text" className="form-control" value={groupData.annee} onChange={(e) => setGroupData({...groupData, annee: e.target.value})} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Professeur Responsable</label>
+                    <select className="form-control" value={groupData.idEnseignant} onChange={(e) => setGroupData({...groupData, idEnseignant: e.target.value})}>
+                      <option value="">Sélectionner un enseignant</option>
+                      {(db.enseignants || []).map(enseignant => {
+                        const u = (db.utilisateurs || []).find(user => user.id === enseignant.utilisateurId);
+                        return (
+                          <option key={enseignant.idEnseignant} value={enseignant.idEnseignant}>
+                            {u ? `${u.nom} ${u.prenom}` : 'Inconnu'}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Étudiants affectés (Cochez les étudiants du projet)</label>
+                    <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: '8px', padding: '10px', background: 'var(--bg)' }}>
+                      {(db.etudiants || [])
+                        .filter(etudiant => (etudiant.idFiliere || etudiant.filiereId) === selectedFiliereId)
+                        .map(etudiant => {
+                        const u = (db.utilisateurs || []).find(user => user.id === etudiant.utilisateurId);
+                        const etudiantId = etudiant.idEtudiant || etudiant.id;
+                        const isChecked = groupData.etudiantsIds.includes(etudiantId);
+                        return (
+                          <div key={etudiantId} style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
+                            <input 
+                              type="checkbox" 
+                              checked={isChecked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setGroupData({...groupData, etudiantsIds: [...groupData.etudiantsIds, etudiantId]});
+                                } else {
+                                  setGroupData({...groupData, etudiantsIds: groupData.etudiantsIds.filter(id => id !== etudiantId)});
+                                }
+                              }}
+                              style={{ marginRight: '10px', cursor: 'pointer', transform: 'scale(1.2)' }}
+                            />
+                            <span style={{ fontSize: '0.85rem', cursor: 'pointer' }} onClick={() => {
+                              if (!isChecked) {
+                                setGroupData({...groupData, etudiantsIds: [...groupData.etudiantsIds, etudiantId]});
+                              } else {
+                                setGroupData({...groupData, etudiantsIds: groupData.etudiantsIds.filter(id => id !== etudiantId)});
+                              }
+                            }}>
+                              <strong style={{ fontFamily: 'monospace', color: 'var(--blue-mid)' }}>{etudiant.cne}</strong> - {u ? `${u.nom} ${u.prenom}` : 'Inconnu'}
+                            </span>
+                          </div>
+                        );
+                      })}
+                      {(db.etudiants || []).filter(e => (e.idFiliere || e.filiereId) === selectedFiliereId).length === 0 && (
+                        <div style={{ fontSize: '0.85rem', color: 'var(--text-3)', textAlign: 'center', padding: '10px' }}>
+                          Aucun étudiant dans cette filière.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+
+
             </form>
           </div>
           <div className="side-panel-footer">
             <button className="btn btn-ghost" onClick={() => setShowGroupPanel(false)}>Annuler</button>
-            <button type="submit" form="groupForm" className="btn btn-primary">Créer le groupe</button>
+            <button type="submit" form="groupForm" className="btn btn-primary">
+              {editingGroup ? 'Enregistrer les modifications' : 'Créer le groupe'}
+            </button>
           </div>
         </div>
       </div>

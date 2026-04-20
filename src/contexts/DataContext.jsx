@@ -25,7 +25,6 @@ export const DataProvider = ({ children }) => {
       try {
         const data = await api('/sync');
         if (data.status === 'success' && data.data) {
-          // Merge with initial state to ensure all keys exist
           setDb(prev => ({ ...prev, ...data.data }));
         }
       } catch (err) {
@@ -53,6 +52,7 @@ export const DataProvider = ({ children }) => {
       if (prop === 'announcements') return target.annonces || [];
       if (prop === 'rooms') return target.salles || [];
       if (prop === 'groups') return target.groupes || [];
+      if (prop === 'groupesTD' || prop === 'groupesTP') return target.groupes || [];
       
       const val = target[prop];
       if (val === undefined && [
@@ -67,13 +67,13 @@ export const DataProvider = ({ children }) => {
   }), [db]);
 
   const [counters, setCounters] = useState({
-    utilisateurs: 5000, etudiants: 5000, enseignants: 5000, filieres: 5000,
-    groupes: 5000, modules: 5000, seances: 5000, absences: 5000, notes: 5000,
-    annonces: 5000, pfes: 5000, salles: 5000
+    utilisateurs: 100000, etudiants: 100000, enseignants: 100000, filieres: 100000,
+    groupes: 100000, modules: 100000, seances: 100000, absences: 100000, notes: 100000,
+    annonces: 100000, pfes: 100000, salles: 100000
   });
 
   const nextId = (col) => {
-    const id = counters[col] || 5000;
+    const id = counters[col] || 100000;
     setCounters(prev => ({ ...prev, [col]: id + 1 }));
     return id;
   };
@@ -84,6 +84,14 @@ export const DataProvider = ({ children }) => {
     return list.find(x => (x.id || x.idAnnonce || x.idEtudiant || x.idEnseignant || x.idModule) === parseInt(id));
   };
 
+  const getItemId = (item) => {
+    if (!item) return null;
+    return item.idGroupe || item.idAnnonce || item.idEtudiant || item.idEnseignant ||
+           item.idModule || item.idDocument || item.idAbsence || item.idPG || 
+           item.idReclamation || item.idNote || item.idSalle || 
+           item.idSeance || item.idFiliere || item.id;
+  };
+
   const save = async (col, item) => {
     const actualCol = col === 'users' ? 'utilisateurs' : 
                       col === 'students' ? 'etudiants' : 
@@ -92,148 +100,130 @@ export const DataProvider = ({ children }) => {
                       col === 'grades' ? 'notes' : 
                       col === 'announcements' ? 'annonces' : 
                       col === 'rooms' ? 'salles' : 
-                      col === 'groups' ? 'groupes' : col;
+                      col === 'groupesTD' || col === 'groupesTP' || col === 'groups' ? 'groupes' : col;
 
-    // Optimistic Update — add/update item locally immediately
+    const primaryIdKeyMap = {
+      'groupes': 'idGroupe', 'annonces': 'idAnnonce', 'etudiants': 'idEtudiant',
+      'enseignants': 'idEnseignant', 'modules': 'idModule', 'filieres': 'idFiliere',
+      'salles': 'idSalle', 'seances': 'idSeance', 'documents': 'idDocument',
+      'absences': 'idAbsence', 'notes': 'idNote', 'reclamations': 'idReclamation',
+      'utilisateurs': 'id'
+    };
+    const pkName = primaryIdKeyMap[actualCol] || 'id';
+
+    // Treat entities as existing whenever a valid primary key is present.
+    // Use both the mapped PK and generic `id` as fallback to avoid
+    // misclassifying existing records when one representation is missing.
+    const recordId = item[pkName] ?? item.id;
+    const hasPk = recordId !== undefined && recordId !== null && recordId !== '';
+    const isNew = !hasPk;
+    const itemToSave = { ...item };
+
+    if (isNew) {
+      const tid = nextId(actualCol);
+      itemToSave.id = tid;
+      if (pkName !== 'id') itemToSave[pkName] = tid;
+    }
+
+    // Optimistic Update
     setDb(prev => {
-      const list = [...(prev[actualCol] || [])];
-      const targetId = item.id || item.idAnnonce || item.idEtudiant || item.idEnseignant || item.idModule || item.idDocument;
-      const idx = list.findIndex(x => (x.id || x.idAnnonce || x.idEtudiant || x.idEnseignant || x.idModule || x.idDocument) === targetId);
-      if (idx >= 0) list[idx] = { ...item };
-      else list.push({ ...item });
-      return { ...prev, [actualCol]: list };
+      const updates = { ...prev };
+      const actualList = [...(prev[actualCol] || [])];
+      const targetId = getItemId(itemToSave);
+      const idx = actualList.findIndex(x => getItemId(x) === targetId);
+      
+      if (idx >= 0) actualList[idx] = { ...actualList[idx], ...itemToSave };
+      else actualList.push(itemToSave);
+      
+      updates[actualCol] = actualList;
+
+      // ALSO Update associated utilisateur optimistically if names are provided
+      if ((actualCol === 'etudiants' || actualCol === 'enseignants') && itemToSave.utilisateurId) {
+        const userList = [...(prev.utilisateurs || [])];
+        const uIdx = userList.findIndex(u => u.id === itemToSave.utilisateurId);
+        if (uIdx >= 0) {
+          userList[uIdx] = { 
+            ...userList[uIdx], 
+            nom: itemToSave.nom || userList[uIdx].nom,
+            prenom: itemToSave.prenom || userList[uIdx].prenom,
+            email: itemToSave.email || userList[uIdx].email
+          };
+          updates.utilisateurs = userList;
+        }
+      }
+      
+      return updates;
     });
 
     try {
+      let endpoint = `/${actualCol}`;
+      let method = isNew ? 'POST' : 'PATCH';
+
+      // Custom Endpoints
+      if (actualCol === 'utilisateurs') endpoint = isNew ? '/auth/register' : `/utilisateurs/${item.id}`;
+      else if (actualCol === 'pfes') endpoint = isNew ? '/pfe/propose' : `/pfe/${item.idPG || item.id}`;
+      else if (actualCol === 'reclamations' && isNew) endpoint = '/notes/reclaim';
+      else if (actualCol === 'reclamations' && !isNew) endpoint = `/notes/reclaim/${recordId}`;
+      else if (!isNew) endpoint = `/${actualCol}/${recordId}`;
+
+      // Payload Construction (Ensures standard field names)
+      const payload = { ...item };
+      
+      // Special mappings for specific columns to match Backend Controllers
       if (actualCol === 'annonces') {
-        const isNew = !item.idAnnonce && (!item.id || item.id > 1000);
-        const endpoint = isNew ? '/annonces' : `/annonces/${item.idAnnonce || item.id}`;
-        await api(endpoint, {
-          method: isNew ? 'POST' : 'PATCH',
-          body: JSON.stringify({
-            titre: item.titre || item.title,
-            contenu: item.contenu || item.content,
-            urgent: item.urgente !== undefined ? item.urgente : item.urgent,
-            cible: item.cible || item.target,
-            statut: item.statut || 'PUBLIEE'
-          })
-        });
-      }
-      else if (actualCol === 'etudiants') {
-        const isNew = !item.idEtudiant && (!item.id || item.id > 1000);
-        const endpoint = isNew ? '/etudiants' : `/etudiants/${item.idEtudiant || item.id}`;
-        await api(endpoint, {
-          method: isNew ? 'POST' : 'PATCH',
-          body: JSON.stringify(item)
-        });
-      }
-      else if (actualCol === 'enseignants') {
-        const isNew = !item.idEnseignant && (!item.id || item.id > 1000);
-        const endpoint = isNew ? '/enseignants' : `/enseignants/${item.idEnseignant || item.id}`;
-        await api(endpoint, {
-          method: isNew ? 'POST' : 'PATCH',
-          body: JSON.stringify(item)
-        });
-      }
-      else if (actualCol === 'modules') {
-        const isNew = !item.idModule && (!item.id || item.id > 1000);
-        const endpoint = isNew ? '/modules' : `/modules/${item.idModule || item.id}`;
-        await api(endpoint, {
-          method: isNew ? 'POST' : 'PATCH',
-          body: JSON.stringify(item)
-        });
-      }
-      else if (actualCol === 'documents') {
-        const isNew = !item.idDocument || item.idDocument > 1000000; // large = optimistic temp id
-        if (isNew) {
-          // POST and get the real DB record back, then replace the temp optimistic item
-          const result = await api('/documents', {
-            method: 'POST',
-            body: JSON.stringify({
-              titre: item.titre || item.title,
-              type: item.type,
-              cheminFichier: item.cheminFichier || item.fichier || item.filename || 'document.pdf',
-              idModule: item.idModule || item.moduleId,
-              idFiliere: item.idFiliere || item.filiereId
-            })
-          });
-          // Replace the optimistic item with the real DB record (has correct idDocument)
-          if (result?.data) {
-            const serverDoc = result.data;
-            const realDoc = {
-              ...item,
-              ...serverDoc,
-              id: serverDoc.idDocument,
-              idDocument: serverDoc.idDocument,
-              idModule: serverDoc.idModule || item.idModule,
-              moduleId: serverDoc.idModule || item.idModule,
-              titre: serverDoc.titre || item.titre,
-              type: serverDoc.type || item.type,
-              fichier: serverDoc.cheminFichier || item.fichier,
-              filename: serverDoc.cheminFichier || item.fichier,
-            };
-            setDb(prev => {
-              // Remove the optimistic item, add the real one
-              const list = (prev[actualCol] || []).filter(
-                x => (x.id || x.idDocument) !== (item.id || item.idDocument)
-              );
-              list.push(realDoc);
-              return { ...prev, [actualCol]: list };
-            });
-          }
-          // Delay full sync so DB write has time to propagate
-          setTimeout(() => fetchSync(), 1000);
-          return; // Don't call fetchSync() immediately
-        } else {
-          await api(`/documents/${item.idDocument}`, {
-            method: 'PATCH',
-            body: JSON.stringify({
-              titre: item.titre || item.title,
-              type: item.type,
-              cheminFichier: item.fichier || item.filename || 'document.pdf',
-              idModule: item.idModule || item.moduleId,
-            })
-          });
+        payload.titre = item.titre || item.title;
+        payload.contenu = item.contenu || item.content;
+      } else if (actualCol === 'groupes') {
+        payload.nom = item.nom || item.name;
+        payload.capaciteMax = parseInt(item.capaciteMax || item.capacity || item.capacite || 30);
+      } else if (actualCol === 'salles') {
+        payload.nom = item.nom || item.name;
+        payload.capaciteMax = parseInt(item.capaciteMax || item.capacity || 40);
+      } else if ((actualCol === 'etudiants' || actualCol === 'enseignants') && !isNew) {
+        // Ensure names are NOT lost if not provided by UI
+        const user = db.utilisateurs.find(u => u.id === item.utilisateurId);
+        if (user) {
+          if (!payload.nom && user.nom) payload.nom = user.nom;
+          if (!payload.prenom && user.prenom) payload.prenom = user.prenom;
+          if (!payload.email && user.email) payload.email = user.email;
         }
       }
-      fetchSync();
+
+      await api(endpoint, { method, body: JSON.stringify(payload) });
+      await fetchSync();
     } catch (err) {
       console.error(`Failed to persist ${actualCol}:`, err);
-      fetchSync();
+      await fetchSync();
+      throw err;
     }
   };
 
   const remove = async (col, id) => {
-    const actualCol = col === 'users' ? 'utilisateurs' : 
-                      col === 'announcements' ? 'annonces' : 
-                      col === 'students' ? 'etudiants' : 
-                      col === 'teachers' ? 'enseignants' :
-                      col === 'modules' ? 'modules' : col;
+    const actualCol = col === 'users' ? 'utilisateurs' : col === 'announcements' ? 'annonces' : 
+                      col === 'students' ? 'etudiants' : col === 'teachers' ? 'enseignants' :
+                      col === 'modules' ? 'modules' : col === 'rooms' ? 'salles' : 
+                      col === 'groups' || col === 'groupesTD' || col === 'groupesTP' ? 'groupes' : col;
 
     setDb(prev => ({ 
       ...prev, 
-      [actualCol]: (prev[actualCol] || []).filter(x => (x.id || x.idAnnonce || x.idEtudiant || x.idEnseignant || x.idModule || x.idDocument) !== id) 
+      [actualCol]: (prev[actualCol] || []).filter(x => getItemId(x) !== id) 
     }));
 
     try {
       const endpointMap = {
-        'annonces': '/annonces',
-        'etudiants': '/etudiants',
-        'enseignants': '/enseignants',
-        'modules': '/modules',
-        'documents': '/documents'
+        'annonces': '/annonces', 'etudiants': '/etudiants', 'enseignants': '/enseignants',
+        'modules': '/modules', 'documents': '/documents', 'filieres': '/filieres',
+        'groupes': '/groupes', 'salles': '/salles', 'pfes': '/pfe', 'reclamations': '/notes/reclaim'
       };
-      if (endpointMap[actualCol]) {
-        await api(`${endpointMap[actualCol]}/${id}`, { method: 'DELETE' });
-      }
-      fetchSync();
+      const url = endpointMap[actualCol] || `/${actualCol}`;
+      await api(`${url}/${id}`, { method: 'DELETE' });
+      await fetchSync();
     } catch (err) {
       console.error(`Failed to remove from ${actualCol}:`, err);
-      fetchSync();
+      await fetchSync();
     }
   };
 
-  // Helpers
   const filiereName = (id) => (db.filieres || []).find(f => (f.idFiliere || f.id) === parseInt(id))?.intitule || '—';
   const teacherName = (id) => {
     const ens = (db.enseignants || []).find(e => (e.idEnseignant || e.id) === parseInt(id));

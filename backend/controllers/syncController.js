@@ -4,18 +4,25 @@ const prisma = require('../prismaClient');
  * Normalizes entity objects by adding a generic 'id' property based on their primary key.
  * This version is safer and won't mangle complex types like Dates or Decimals.
  */
-const normalizeData = (data) => {
+const normalizeData = (data, visited = new Set()) => {
   if (data === null || data === undefined) return data;
+
+  // Handle circular references
+  if (typeof data === 'object' && data !== null) {
+    if (visited.has(data)) return undefined; // or null
+    visited.add(data);
+  }
 
   // Handle Arrays
   if (Array.isArray(data)) {
-    return data.map(item => normalizeData(item));
+    return data.map(item => normalizeData(item, visited));
   }
 
   // Handle Plain Objects only
   if (typeof data === 'object' && (data.constructor === Object || !data.constructor)) {
     const normalized = { ...data };
     
+    // Primary Key Normalization
     const pkPatterns = [
       'idSeance', 'idAbsence', 'idNote', 'idAnnonce', 'idClub', 'idSalle', 
       'idModule', 'idEtudiant', 'idEnseignant', 'idEDT', 'idAffectation', 
@@ -34,9 +41,41 @@ const normalizeData = (data) => {
       }
     }
 
+    // Common Aliases for Frontend Compatibility (RG32 & Legacy support)
+    const aliases = {
+      idEtudiant: 'studentId',
+      idEnseignant: 'teacherId',
+      idModule: 'moduleId',
+      idFiliere: 'filiereId',
+      idGroupe: 'groupId',
+      idAnnonce: 'announcementId',
+      idDocument: 'documentId',
+      idAuteur: 'authorId',
+      idAuteur: 'authorId',
+      titre: 'title',
+      contenu: ['content', 'body'],
+      dateCreation: 'createdAt',
+      dateUpload: 'uploadedAt',
+      cheminFichier: 'filename'
+    };
+
+    for (const [key, alias] of Object.entries(aliases)) {
+      if (normalized[key] !== undefined) {
+        if (Array.isArray(alias)) {
+          alias.forEach(a => { if (normalized[a] === undefined) normalized[a] = normalized[key]; });
+        } else {
+          if (normalized[alias] === undefined) normalized[alias] = normalized[key];
+        }
+      }
+    }
+
     // Recursively normalize properties
     for (const key in normalized) {
-      normalized[key] = normalizeData(normalized[key]);
+      // Don't recurse into already normalized aliases to avoid infinite loops
+      // and only recurse into objects/arrays
+      if (typeof normalized[key] === 'object' && normalized[key] !== null) {
+        normalized[key] = normalizeData(normalized[key], visited);
+      }
     }
 
     return normalized;
@@ -57,7 +96,13 @@ const getFullState = async (req, res) => {
     // Basic shared data (Filieres, Groupes, Salles, Modules)
     const baseQueries = {
       filieres: prisma.filiere.findMany(),
-      groupes: prisma.groupe.findMany(),
+      groupes: prisma.groupe.findMany({
+        include: {
+          enseignant: { select: { utilisateur: { select: { nom: true, prenom: true } } } },
+          etudiantsProjet: true,
+          filiere: { select: { code: true } }
+        }
+      }),
       salles: prisma.salle.findMany(),
       modules: prisma.module.findMany(),
       utilisateurs: prisma.utilisateur.findMany({
@@ -65,13 +110,18 @@ const getFullState = async (req, res) => {
       }),
       annonces: prisma.annonce.findMany({ where: { statut: 'PUBLIEE' } }),
       reclamations: prisma.reclamation.findMany({ include: { note: true } }),
-      documents: prisma.document.findMany()
+      documents: prisma.document.findMany(),
+      clubs: prisma.club.findMany({
+        include: {
+          membres: { select: { idEtudiant: true } }
+        }
+      })
     };
 
     let resultData = {};
 
     if (role === 'admin') {
-      const [filieres, groupes, salles, modules, utilisateurs, annonces, reclamations, documents, etudiants, enseignants, seances, absences, notes, pfes, juries, stages, edts] = await Promise.all([
+      const [filieres, groupes, salles, modules, utilisateurs, annonces, reclamations, documents, clubs, etudiants, enseignants, seances, absences, notes, pfes, juries, stages, edts] = await Promise.all([
         baseQueries.filieres,
         baseQueries.groupes,
         baseQueries.salles,
@@ -80,6 +130,7 @@ const getFullState = async (req, res) => {
         baseQueries.annonces,
         baseQueries.reclamations,
         baseQueries.documents,
+        baseQueries.clubs,
         prisma.etudiant.findMany(),
         prisma.enseignant.findMany(),
         prisma.seance.findMany(),
@@ -91,13 +142,13 @@ const getFullState = async (req, res) => {
         prisma.edt.findMany()
       ]);
 
-      resultData = { filieres, groupes, salles, modules, utilisateurs, annonces, reclamations, documents, etudiants, enseignants, seances, absences, notes, pfes, juries, stages, edts };
+      resultData = { filieres, groupes, salles, modules, utilisateurs, annonces, reclamations, documents, clubs, etudiants, enseignants, seances, absences, notes, pfes, juries, stages, edts };
     } 
     else if (role === 'teacher') {
       const teacher = await prisma.enseignant.findUnique({ where: { utilisateurId: id } });
       const teacherId = teacher?.idEnseignant;
 
-      const [filieres, groupes, salles, modules, utilisateurs, annonces, documents, seances, pfes, juries, affectations] = await Promise.all([
+      const [filieres, groupes, salles, modules, utilisateurs, annonces, documents, clubs, seances, pfes, juries, affectations] = await Promise.all([
         baseQueries.filieres,
         baseQueries.groupes,
         baseQueries.salles,
@@ -105,6 +156,7 @@ const getFullState = async (req, res) => {
         baseQueries.utilisateurs,
         baseQueries.annonces,
         baseQueries.documents,
+        baseQueries.clubs,
         prisma.seance.findMany({ where: { idEnseignant: teacherId } }),
         prisma.pfe.findMany({ where: { idEncadrant: teacherId } }),
         prisma.jury.findMany({ 
@@ -136,13 +188,13 @@ const getFullState = async (req, res) => {
         prisma.reclamation.findMany({ where: { note: { idModule: { in: moduleIds } } }, include: { note: true } })
       ]);
 
-      resultData = { filieres, groupes, salles, modules, utilisateurs, annonces, documents, seances, etudiants: students, pfes, notes, absences, juries, reclamations, affectations };
+      resultData = { filieres, groupes, salles, modules, utilisateurs, annonces, documents, clubs, seances, etudiants: students, pfes, notes, absences, juries, reclamations, affectations, enseignants: [teacher] };
     }
     else if (role === 'student') {
       const etudiant = await prisma.etudiant.findUnique({ where: { utilisateurId: id } });
       const etudiantId = etudiant?.idEtudiant;
 
-      const [filieres, groupes, salles, modules, utilisateurs, annonces, documents, seances, notes, absences, pfes, juries, stages, reclamations] = await Promise.all([
+      const [filieres, groupes, salles, modules, utilisateurs, annonces, documents, clubs, seances, notes, absences, pfes, juries, stages, reclamations, formations] = await Promise.all([
         baseQueries.filieres,
         baseQueries.groupes,
         baseQueries.salles,
@@ -150,6 +202,7 @@ const getFullState = async (req, res) => {
         baseQueries.utilisateurs,
         baseQueries.annonces,
         baseQueries.documents,
+        baseQueries.clubs,
         prisma.seance.findMany({ where: { idGroupe: etudiant.idGroupeTD || etudiant.idGroupeTP } }),
         prisma.note.findMany({ where: { idEtudiant: etudiantId } }),
         prisma.absence.findMany({ where: { idEtudiant: etudiantId } }),
@@ -159,15 +212,33 @@ const getFullState = async (req, res) => {
           include: { membresEnseignants: { include: { utilisateur: true } } }
         }),
         prisma.stage.findMany({ where: { idEtudiant: etudiantId } }),
-        prisma.reclamation.findMany({ where: { note: { idEtudiant: etudiantId } }, include: { note: true } })
+        prisma.reclamation.findMany({ where: { note: { idEtudiant: etudiantId } }, include: { note: true } }),
+        prisma.formation.findMany({ 
+          include: { 
+            collaborateur: { select: { nomOrganisme: true } },
+            _count: { select: { inscriptions: true } }
+          }
+        })
       ]);
 
-      resultData = { filieres, groupes, salles, modules, utilisateurs, annonces, documents, seances, etudiants: [etudiant], notes, absences, pfes, juries, stages, reclamations };
+      // Flatten formations for easier frontend consumption
+      const flattendFormations = formations.map(f => ({
+        ...f,
+        collaborateur: f.collaborateur?.nomOrganisme || 'Partenaire externe',
+        inscrits: f._count?.inscriptions || 0,
+        capacite: f.capacite || 50, // Default if not in schema
+        lieu: f.lieu || 'FST Tanger',
+        dateDebut: f.dateDebut || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+      }));
+
+      resultData = { filieres, groupes, salles, modules, utilisateurs, annonces, documents, clubs, seances, etudiants: [etudiant], notes, absences, pfes, juries, stages, reclamations, formations: flattendFormations };
     }
+
+    const normalized = normalizeData(resultData);
 
     res.json({
       status: 'success',
-      data: normalizeData(resultData)
+      data: normalized
     });
 
   } catch (error) {

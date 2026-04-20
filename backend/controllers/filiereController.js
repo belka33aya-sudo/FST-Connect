@@ -35,11 +35,17 @@ const getFilieres = async (req, res) => {
  * @access  Private/Admin
  */
 const createFiliere = async (req, res) => {
-  const { code, intitule } = req.body;
+  const { code, intitule, niveauEtude, nombreSemestres, duree } = req.body;
 
   try {
     const filiere = await prisma.filiere.create({
-      data: { code, intitule }
+      data: {
+        code,
+        intitule,
+        niveauEtude: niveauEtude || "Cycle d'Ingénieur",
+        nombreSemestres: nombreSemestres ? parseInt(nombreSemestres) : 6,
+        duree: duree ? parseInt(duree) : 3
+      }
     });
 
     res.status(201).json({
@@ -62,12 +68,18 @@ const createFiliere = async (req, res) => {
  */
 const updateFiliere = async (req, res) => {
   const { id } = req.params;
-  const { code, intitule } = req.body;
+  const { code, intitule, niveauEtude, nombreSemestres, duree } = req.body;
 
   try {
     const filiere = await prisma.filiere.update({
       where: { idFiliere: parseInt(id) },
-      data: { code, intitule }
+      data: {
+        code,
+        intitule,
+        ...(niveauEtude     !== undefined && { niveauEtude }),
+        ...(nombreSemestres !== undefined && { nombreSemestres: parseInt(nombreSemestres) }),
+        ...(duree           !== undefined && { duree: parseInt(duree) })
+      }
     });
 
     res.json({

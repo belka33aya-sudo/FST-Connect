@@ -110,7 +110,7 @@ const getModuleDetails = async (req, res) => {
  * @access  Private/Admin
  */
 const createModule = async (req, res) => {
-  const { code, intitule, idFiliere, coefficient, semestre, idEnseignant } = req.body;
+  const { code, intitule, idFiliere, coefficient, semestre, idResponsable } = req.body;
 
   try {
     const module = await prisma.$transaction(async (tx) => {
@@ -120,15 +120,16 @@ const createModule = async (req, res) => {
           intitule,
           idFiliere: parseInt(idFiliere),
           coefficient: parseFloat(coefficient),
-          semestre
+          semestre,
+          idResponsable: idResponsable ? parseInt(idResponsable) : null
         }
       });
 
-      if (idEnseignant) {
+      if (idResponsable) {
         await tx.affectation.create({
           data: {
             idModule: m.idModule,
-            idEnseignant: parseInt(idEnseignant),
+            idEnseignant: parseInt(idResponsable),
             typeIntervention: 'CM',
             heuresAssignees: 48
           }
@@ -151,7 +152,7 @@ const createModule = async (req, res) => {
  */
 const updateModule = async (req, res) => {
   const { id } = req.params;
-  const { code, intitule, idFiliere, coefficient, semestre, idEnseignant } = req.body;
+  const { code, intitule, idFiliere, coefficient, semestre, idResponsable } = req.body;
 
   try {
     const module = await prisma.$transaction(async (tx) => {
@@ -162,11 +163,12 @@ const updateModule = async (req, res) => {
           intitule,
           idFiliere: idFiliere ? parseInt(idFiliere) : undefined,
           coefficient: coefficient ? parseFloat(coefficient) : undefined,
-          semestre
+          semestre,
+          idResponsable: idResponsable ? parseInt(idResponsable) : undefined
         }
       });
 
-      if (idEnseignant) {
+      if (idResponsable) {
         // Simple logic: update or create one CM affectation
         const existing = await tx.affectation.findFirst({
           where: { idModule: parseInt(id), typeIntervention: 'CM' }
@@ -175,13 +177,13 @@ const updateModule = async (req, res) => {
         if (existing) {
           await tx.affectation.update({
             where: { idAffectation: existing.idAffectation },
-            data: { idEnseignant: parseInt(idEnseignant) }
+            data: { idEnseignant: parseInt(idResponsable) }
           });
         } else {
           await tx.affectation.create({
             data: {
               idModule: m.idModule,
-              idEnseignant: parseInt(idEnseignant),
+              idEnseignant: parseInt(idResponsable),
               typeIntervention: 'CM',
               heuresAssignees: 48
             }
