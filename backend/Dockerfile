@@ -1,8 +1,7 @@
-FROM node:20-alpine
+FROM node:20-bookworm
 WORKDIR /app
 COPY package*.json ./
 RUN npm install
-# Since you use Prisma, we need to generate the client
 COPY prisma ./prisma/
 RUN npx prisma generate
 COPY . .

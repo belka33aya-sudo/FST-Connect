@@ -1,7 +1,7 @@
 {
   "name": "FST-Connect Full Stack",
   "dockerComposeFile": "../docker-compose.yml",
-  "service": "frontend", // This is your primary workspace
+  "service": "frontend",
   "workspaceFolder": "/app",
   "customizations": {
     "vscode": {
