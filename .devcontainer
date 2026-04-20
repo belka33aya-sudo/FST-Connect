@@ -1,0 +1,17 @@
+{
+  "name": "FST-Connect Full Stack",
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "frontend", // This is your primary workspace
+  "workspaceFolder": "/app",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-azuretools.vscode-docker",
+        "prisma.prisma",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ]
+    }
+  },
+  "forwardPorts": [5173, 3000, 5432]
+}
