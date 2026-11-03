@@ -8,10 +8,10 @@ const Profil = () => {
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
-  const student = db.etudiants.find(s => s.utilisateurId === currentUser.id);
-  const filiere = student ? db.filieres.find(f => f.id === (student.idFiliere || student.filiereId)) : null;
-  const group = student ? db.groupes.find(g => g.id === (student.idGroupeTD || student.groupTDId)) : null;
-  const user = db.utilisateurs.find(u => u.id === currentUser.id);
+  const student = (db.etudiants || []).find(s => s && (s.utilisateurId == currentUser?.id || s.idEtudiant == currentUser?.id)) || currentUser?.etudiant;
+  const filiere = student ? (db.filieres || []).find(f => (f.id || f.idFiliere) === (student.idFiliere || student.filiereId)) : null;
+  const group = student ? (db.groupes || []).find(g => (g.id || g.idGroupe) === (student.idGroupeTD || student.groupTDId)) : null;
+  const user = (db.utilisateurs || []).find(u => u && u.id == currentUser?.id) || currentUser;
 
   const [phone, setPhone] = useState(user?.telephone || '');
   const [password, setPassword] = useState('');

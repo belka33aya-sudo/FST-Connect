@@ -156,16 +156,18 @@ const Notes = () => {
   const [showReclamationForm, setShowReclamationForm] = useState(false);
   const [toast, setToast] = useState(null);
 
-  const student = getStudentByUserId(currentUser.id);
+  const student = getStudentByUserId(currentUser.id) || currentUser.etudiant;
   if (!student) return <div className="empty-state"><p>Profil étudiant introuvable.</p></div>;
 
   const isReadOnly = student.statut === 'ABANDONNE';
+  const sid = student.id || student.idEtudiant;
+  const sfid = student.idFiliere || student.filiereId;
 
   const myGrades = useMemo(() => {
-    return db.notes.filter(g => (g.idEtudiant === student.id || g.studentId === student.id) && g.publiee);
-  }, [db.notes, student.id]);
+    return (db.notes || []).filter(g => (g.idEtudiant == sid || g.studentId == sid) && (g.publiee || g.statut === 'PUBLIEE'));
+  }, [db.notes, sid]);
 
-  const filiereModules = db.modules.filter(m => (m.idFiliere === student.idFiliere || m.filiereId === student.filiereId));
+  const filiereModules = (db.modules || []).filter(m => (m.idFiliere == sfid || m.filiereId == sfid));
 
   const modulesWithGrades = useMemo(() => {
     return filiereModules.map(mod => {

@@ -72,7 +72,7 @@ const AuthScreen = () => {
       student: 'etudiant@dept.ma',
     };
     setEmail(defaults[role]);
-    setPassword(role === 'admin' ? 'admin123' : role === 'teacher' ? 'prof123' : 'etu123');
+    setPassword('password123');
   };
 
   const handleLogin = async (e) => {

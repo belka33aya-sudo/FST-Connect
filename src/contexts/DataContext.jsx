@@ -243,8 +243,8 @@ export const DataProvider = ({ children }) => {
     return (db.annonces || []).filter(a => !a.readBy?.includes(userId)).length;
   };
 
-  const getStudentByUserId = (userId) => (db.etudiants || []).find(s => s.utilisateurId === userId);
-  const getTeacherByUserId = (userId) => (db.enseignants || []).find(t => t.utilisateurId === userId);
+  const getStudentByUserId = (userId) => (db.etudiants || []).find(s => s && (s.utilisateurId == userId || s.idEtudiant == userId || s.id == userId));
+  const getTeacherByUserId = (userId) => (db.enseignants || []).find(t => t && (t.utilisateurId == userId || t.idEnseignant == userId || t.id == userId));
 
   const gradeAvg = (cc = 0, exam = 0, coeffCC = 0.4, coeffExam = 0.6) => {
     return (cc * coeffCC) + (exam * coeffExam);

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
+import { Outlet, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useData } from '../contexts/DataContext';
 import AccessGuard from '../components/etudiant/AccessGuard';
@@ -8,13 +8,14 @@ import Header from '../components/Header';
 
 const EtudiantLayout = () => {
   const { currentUser } = useAuth();
-  const { getStudentByUserId } = useData();
+  const { getStudentByUserId, loading } = useData();
   const location = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  if (!currentUser || currentUser.role !== 'student') return null;
+  if (!currentUser) return <Navigate to="/auth" replace />;
+  if (currentUser.role !== 'student') return <Navigate to="/dashboard" replace />;
 
-  const student = getStudentByUserId(currentUser.id);
+  const student = getStudentByUserId(currentUser.id) || currentUser.etudiant;
 
   const openSidebar = () => setIsSidebarOpen(true);
   const closeSidebar = () => setIsSidebarOpen(false);

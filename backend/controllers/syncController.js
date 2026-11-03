@@ -191,8 +191,38 @@ const getFullState = async (req, res) => {
       resultData = { filieres, groupes, salles, modules, utilisateurs, annonces, documents, clubs, seances, etudiants: students, pfes, notes, absences, juries, reclamations, affectations, enseignants: [teacher] };
     }
     else if (role === 'student') {
-      const etudiant = await prisma.etudiant.findUnique({ where: { utilisateurId: id } });
+      const etudiant = await prisma.etudiant.findUnique({ 
+        where: { utilisateurId: id },
+        include: {
+          filiere: true,
+          groupeTD: true,
+          groupeTP: true
+        }
+      });
       const etudiantId = etudiant?.idEtudiant;
+
+      // Build session filter for student: their TD group, TP group, or general filiere courses
+      const sessionOrFilters = [];
+      if (etudiant?.idGroupeTD) sessionOrFilters.push({ idGroupe: etudiant.idGroupeTD });
+      if (etudiant?.idGroupeTP) sessionOrFilters.push({ idGroupe: etudiant.idGroupeTP });
+      if (etudiant?.idFiliere) {
+        sessionOrFilters.push({ 
+          module: { idFiliere: etudiant.idFiliere },
+          idGroupe: null 
+        });
+      }
+
+      const seanceQuery = sessionOrFilters.length > 0 
+        ? prisma.seance.findMany({ 
+            where: { OR: sessionOrFilters },
+            include: {
+              salle: true,
+              module: true,
+              groupe: true,
+              enseignant: { include: { utilisateur: true } }
+            }
+          })
+        : Promise.resolve([]);
 
       const [filieres, groupes, salles, modules, utilisateurs, annonces, documents, clubs, seances, notes, absences, pfes, juries, stages, reclamations, formations] = await Promise.all([
         baseQueries.filieres,
@@ -203,16 +233,16 @@ const getFullState = async (req, res) => {
         baseQueries.annonces,
         baseQueries.documents,
         baseQueries.clubs,
-        prisma.seance.findMany({ where: { idGroupe: etudiant.idGroupeTD || etudiant.idGroupeTP } }),
-        prisma.note.findMany({ where: { idEtudiant: etudiantId } }),
-        prisma.absence.findMany({ where: { idEtudiant: etudiantId } }),
-        prisma.pfe.findMany({ where: { idEtudiant: etudiantId } }),
-        prisma.jury.findMany({ 
+        seanceQuery,
+        etudiantId ? prisma.note.findMany({ where: { idEtudiant: etudiantId } }) : Promise.resolve([]),
+        etudiantId ? prisma.absence.findMany({ where: { idEtudiant: etudiantId } }) : Promise.resolve([]),
+        etudiantId ? prisma.pfe.findMany({ where: { idEtudiant: etudiantId } }) : Promise.resolve([]),
+        etudiantId ? prisma.jury.findMany({ 
           where: { pfes: { some: { idEtudiant: etudiantId } } },
           include: { membresEnseignants: { include: { utilisateur: true } } }
-        }),
-        prisma.stage.findMany({ where: { idEtudiant: etudiantId } }),
-        prisma.reclamation.findMany({ where: { note: { idEtudiant: etudiantId } }, include: { note: true } }),
+        }) : Promise.resolve([]),
+        etudiantId ? prisma.stage.findMany({ where: { idEtudiant: etudiantId } }) : Promise.resolve([]),
+        etudiantId ? prisma.reclamation.findMany({ where: { note: { idEtudiant: etudiantId } }, include: { note: true } }) : Promise.resolve([]),
         prisma.formation.findMany({ 
           include: { 
             collaborateur: { select: { nomOrganisme: true } },
@@ -226,12 +256,39 @@ const getFullState = async (req, res) => {
         ...f,
         collaborateur: f.collaborateur?.nomOrganisme || 'Partenaire externe',
         inscrits: f._count?.inscriptions || 0,
-        capacite: f.capacite || 50, // Default if not in schema
+        capacite: f.capacite || 50,
         lieu: f.lieu || 'FST Tanger',
         dateDebut: f.dateDebut || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
       }));
 
-      resultData = { filieres, groupes, salles, modules, utilisateurs, annonces, documents, clubs, seances, etudiants: [etudiant], notes, absences, pfes, juries, stages, reclamations, formations: flattendFormations };
+      const normalizedStudent = etudiant ? {
+        ...etudiant,
+        id: etudiant.idEtudiant,
+        studentId: etudiant.idEtudiant,
+        filiereId: etudiant.idFiliere,
+        groupTDId: etudiant.idGroupeTD,
+        groupTPId: etudiant.idGroupeTP
+      } : null;
+
+      resultData = { 
+        filieres, 
+        groupes, 
+        salles, 
+        modules, 
+        utilisateurs, 
+        annonces, 
+        documents, 
+        clubs, 
+        seances, 
+        etudiants: normalizedStudent ? [normalizedStudent] : [], 
+        notes, 
+        absences, 
+        pfes, 
+        juries, 
+        stages, 
+        reclamations, 
+        formations: flattendFormations 
+      };
     }
 
     const normalized = normalizeData(resultData);

@@ -79,8 +79,8 @@ const Absences = () => {
   const [toast, setToast] = useState(null);
 
   const student = useMemo(() => 
-    (db.etudiants || []).find(s => s.utilisateurId === currentUser.id), 
-  [db.etudiants, currentUser.id]);
+    (db.etudiants || []).find(s => s && (s.utilisateurId == currentUser?.id || s.idEtudiant == currentUser?.id)) || currentUser?.etudiant, 
+  [db.etudiants, currentUser]);
 
   if (!student) return <div className="empty-state"><p>Profil étudiant introuvable.</p></div>;
 

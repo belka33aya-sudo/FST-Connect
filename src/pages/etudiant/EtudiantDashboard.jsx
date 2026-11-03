@@ -12,12 +12,12 @@ const EtudiantDashboard = () => {
   const navigate = useNavigate();
 
   const student = useMemo(() => 
-    (db.etudiants || []).find(s => s.utilisateurId === currentUser.id), 
-  [db.etudiants, currentUser.id]);
+    (db.etudiants || []).find(s => s && (s.utilisateurId == currentUser?.id || s.idEtudiant == currentUser?.id)) || currentUser?.etudiant, 
+  [db.etudiants, currentUser]);
 
   const user = useMemo(() => 
-    (db.utilisateurs || []).find(u => u.id === currentUser.id), 
-  [db.utilisateurs, currentUser.id]);
+    (db.utilisateurs || []).find(u => u && u.id == currentUser?.id) || currentUser, 
+  [db.utilisateurs, currentUser]);
 
   if (!student || !user) return <div className="empty-state"><p>Chargement du profil étudiant...</p></div>;
 

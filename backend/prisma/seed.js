@@ -74,7 +74,7 @@ async function main() {
     const nom = SURNAMES[i % SURNAMES.length];
     const prenom = FIRSTNAMES[(i + 7) % FIRSTNAMES.length];
     const u = await prisma.utilisateur.create({
-      data: { nom, prenom, email: `${prenom.toLowerCase()}.${nom.toLowerCase()}${i}@fst.ac.ma`, motDePasse: hashedPass, role: 'teacher' }
+      data: { nom, prenom, email: `${prenom.toLowerCase()}.${nom.toLowerCase()}${i}@fst.ac.ma`.replace(/ /g, '-'), motDePasse: hashedPass, role: 'teacher' }
     });
     const e = await prisma.enseignant.create({
       data: { 
@@ -129,7 +129,7 @@ async function main() {
     for (let i = 0; i < 100; i++) { // 100 students per filiere
       const nom = SURNAMES[Math.floor(Math.random() * SURNAMES.length)];
       const prenom = FIRSTNAMES[Math.floor(Math.random() * FIRSTNAMES.length)];
-      const email = `${prenom.toLowerCase()}.${nom.toLowerCase()}.${f.code.toLowerCase()}${i}@student.ac.ma`;
+      const email = `${prenom.toLowerCase()}.${nom.toLowerCase()}.${f.code.toLowerCase()}${i}@student.ac.ma`.replace(/ /g, '-');
       
       const u = await prisma.utilisateur.create({
         data: { nom, prenom, email, motDePasse: hashedPass, role: 'student' }

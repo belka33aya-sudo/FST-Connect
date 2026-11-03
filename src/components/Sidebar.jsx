@@ -76,7 +76,14 @@ const Sidebar = ({ isOpen, closeSidebar }) => {
   };
 
   const items = navConfig[role] || [];
-  const initials = currentUser.name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase();
+  const displayName = currentUser?.name || `${currentUser?.prenom || ''} ${currentUser?.nom || ''}`.trim() || currentUser?.email || 'Utilisateur';
+  const initials = displayName
+    .split(' ')
+    .filter(Boolean)
+    .map(p => p[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase() || 'U';
   const roleLabels = { admin: 'Administrateur', teacher: 'Enseignant', student: 'Étudiant' };
 
   const handleLogout = () => {
@@ -100,8 +107,8 @@ const Sidebar = ({ isOpen, closeSidebar }) => {
         <div className="sb-profile">
           <div className="sb-avatar">{initials}</div>
           <div>
-            <div className="sb-name">{currentUser.name}</div>
-            <div className="sb-role-tag">{roleLabels[currentUser.role]}</div>
+            <div className="sb-name">{displayName}</div>
+            <div className="sb-role-tag">{roleLabels[currentUser.role] || currentUser.role}</div>
           </div>
         </div>
         
